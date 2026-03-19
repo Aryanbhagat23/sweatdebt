@@ -56,9 +56,6 @@ function VideoCard({ video, currentUser }) {
   const [approved, setApproved] = useState(video.approved || false);
   const [disputed, setDisputed] = useState(video.disputed || false);
 
-  const isOpponent = video.opponentEmail === currentUser?.email;
-  const isUploader = video.uploadedBy === currentUser?.uid;
-
   const timeAgo = (ts) => {
     if (!ts) return "just now";
     const s = Math.floor((new Date() - ts.toDate()) / 1000);
