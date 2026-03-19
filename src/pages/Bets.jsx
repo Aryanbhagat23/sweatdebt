@@ -148,7 +148,7 @@ function BetCard({ bet, user, forfeitIcons, statusStyle, isIncoming }) {
     return `${Math.floor(s/86400)}d ago`;
   };
 
-  const needsProof = isIncoming && bet.status === "pending";
+  
   const proofUploaded = bet.status === "proof_uploaded";
 
   return (
