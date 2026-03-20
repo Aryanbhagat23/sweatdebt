@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../firebase";
 import { collection, onSnapshot } from "firebase/firestore";
+import { LeaderboardSkeleton } from "../components/Skeleton";
+import PageTransition from "../components/PageTransition";
 
 export default function Leaderboard({ user }) {
   const [bets, setBets] = useState([]);
@@ -40,6 +42,7 @@ export default function Leaderboard({ user }) {
   const medals = ["🥇","🥈","🥉"];
 
   return (
+    <PageTransition>
     <div style={S.page}>
       <div style={S.header}>
         <div style={S.title}>Leader<span style={{color:"#d4ff00"}}>board</span></div>
@@ -100,36 +103,36 @@ export default function Leaderboard({ user }) {
           </div>
         </>
       )}
-    </div>
+    </div></PageTransition>
   );
 }
 
 const S = {
   page:{minHeight:"100vh",background:"#111",paddingBottom:"90px"},
   header:{padding:"52px 16px 16px"},
-  title:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"32px",color:"#f5f0e8"},
+  title:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"36px",color:"#f5f0e8",letterSpacing:"0.03em"},
   tabs:{display:"flex",gap:"8px",padding:"0 16px",marginBottom:"20px",flexWrap:"wrap"},
-  tab:{padding:"8px 16px",borderRadius:"20px",fontSize:"13px",fontWeight:"500",cursor:"pointer",transition:"all 0.2s",fontFamily:"monospace",minHeight:"44px",display:"flex",alignItems:"center"},
+  tab:{padding:"8px 16px",borderRadius:"20px",fontFamily:"'DM Mono',monospace",fontSize:"12px",fontWeight:"500",cursor:"pointer",transition:"all 0.2s",minHeight:"40px",display:"flex",alignItems:"center",letterSpacing:"0.05em"},
   empty:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"60vh",gap:"14px"},
   emptyIcon:{fontSize:"52px"},
-  emptyText:{color:"#666",fontSize:"18px",fontWeight:"500"},
-  emptySub:{color:"#444",fontSize:"14px"},
+  emptyText:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"28px",color:"#555",letterSpacing:"0.04em"},
+  emptySub:{fontFamily:"'DM Sans',sans-serif",color:"#333",fontSize:"14px"},
   podium:{display:"flex",alignItems:"flex-end",justifyContent:"center",gap:"12px",padding:"20px 16px 28px"},
   podiumItem:{display:"flex",flexDirection:"column",alignItems:"center",gap:"6px",flex:1,maxWidth:"110px"},
   podiumMedal:{fontSize:"24px"},
-  podiumAvatar:{borderRadius:"50%",background:"#2a2a2a",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",fontWeight:"700",color:"#f5f0e8"},
-  podiumName:{fontSize:"13px",fontWeight:"500",color:"#f5f0e8"},
-  podiumScore:{fontSize:"12px",color:"#d4ff00",fontFamily:"monospace"},
+  podiumAvatar:{borderRadius:"50%",background:"#2a2a2a",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:"20px",color:"#f5f0e8"},
+  podiumName:{fontFamily:"'DM Sans',sans-serif",fontSize:"13px",fontWeight:"500",color:"#f5f0e8"},
+  podiumScore:{fontFamily:"'DM Mono',monospace",fontSize:"12px",color:"#d4ff00"},
   podiumBase:{width:"100%",borderRadius:"4px 4px 0 0"},
   list:{padding:"0 16px"},
   row:{display:"flex",alignItems:"center",gap:"14px",padding:"14px",borderRadius:"16px",marginBottom:"8px",cursor:"pointer",minHeight:"68px"},
-  rank:{fontFamily:"sans-serif",fontSize:"20px",fontWeight:"700",width:"28px",textAlign:"center"},
-  rowAvatar:{width:"46px",height:"46px",borderRadius:"50%",background:"#2a2a2a",border:"1px solid #444",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",fontWeight:"600",color:"#f5f0e8",flexShrink:0},
+  rank:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"24px",width:"28px",textAlign:"center"},
+  rowAvatar:{width:"46px",height:"46px",borderRadius:"50%",background:"linear-gradient(135deg,#d4ff00,#ff5c1a)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:"18px",color:"#000",flexShrink:0},
   rowInfo:{flex:1},
-  rowName:{fontSize:"16px",fontWeight:"500",color:"#f5f0e8"},
-  youTag:{fontSize:"11px",color:"#d4ff00",fontFamily:"monospace",letterSpacing:"0.05em"},
-  rowDetail:{fontSize:"12px",color:"#555",fontFamily:"monospace",marginTop:"3px"},
+  rowName:{fontFamily:"'DM Sans',sans-serif",fontSize:"16px",fontWeight:"500",color:"#f5f0e8"},
+  youTag:{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#d4ff00",letterSpacing:"0.06em"},
+  rowDetail:{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#555",marginTop:"3px"},
   rowRight:{textAlign:"right"},
-  rowPct:{fontSize:"16px",fontWeight:"500",color:"#d4ff00",fontFamily:"monospace"},
-  rowLabel:{fontSize:"11px",color:"#555"},
+  rowPct:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"22px",color:"#d4ff00"},
+  rowLabel:{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#555"},
 };

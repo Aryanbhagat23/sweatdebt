@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "../firebase";
 import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore";
+import { BetsSkeleton, SkeletonBetCard } from "../components/Skeleton";
+import PageTransition from "../components/PageTransition";
 
 export default function Bets({ user }) {
   const navigate = useNavigate();
@@ -58,6 +60,7 @@ export default function Bets({ user }) {
   };
 
   return (
+    <PageTransition>
     <div style={S.page}>
       <div style={S.header}>
         <div style={S.title}>My <span style={{color:"#d4ff00"}}>Bets</span></div>
@@ -81,6 +84,10 @@ export default function Bets({ user }) {
 
       <button style={S.btn} onClick={() => navigate("/create")}>
         + PLACE NEW BET
+      </button>
+      <button style={{...S.btn, background:"transparent", border:"1px solid #d4ff00", color:"#d4ff00", marginTop:"-10px", marginBottom:"16px"}}
+      onClick={() => navigate("/friends")}>
+      🔍 FIND FRIENDS
       </button>
 
       {/* Tabs */}
@@ -107,7 +114,7 @@ export default function Bets({ user }) {
       )}
 
       {loading ? (
-        <div style={S.center}><div style={S.loadingText}>Loading...</div></div>
+  <BetsSkeleton/>
       ) : allBets.length === 0 ? (
         <div style={S.center}>
           <div style={S.emptyIcon}>{activeTab==="incoming" ? "📩" : "⚔️"}</div>
@@ -132,7 +139,7 @@ export default function Bets({ user }) {
           ))}
         </div>
       )}
-    </div>
+    </div></PageTransition>
   );
 }
 
@@ -219,36 +226,36 @@ function BetCard({ bet, user, forfeitIcons, statusStyle, isIncoming }) {
 const S = {
   page:{minHeight:"100vh",background:"#111",paddingBottom:"90px"},
   header:{padding:"52px 16px 16px"},
-  title:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"32px",color:"#f5f0e8",marginBottom:"4px"},
+  title:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"36px",color:"#f5f0e8",letterSpacing:"0.03em",marginBottom:"4px"},
   stats:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:"8px",padding:"0 16px",marginBottom:"16px"},
   stat:{background:"#1a1a1a",borderRadius:"16px",padding:"16px",textAlign:"center",border:"1px solid #222"},
-  num:{fontSize:"32px",fontWeight:"700"},
-  label:{fontSize:"11px",color:"#666",marginTop:"2px",letterSpacing:"0.08em"},
-  btn:{margin:"0 16px 16px",width:"calc(100% - 32px)",background:"#d4ff00",border:"none",borderRadius:"16px",padding:"18px",fontSize:"20px",fontWeight:"700",color:"#000",cursor:"pointer",minHeight:"58px"},
+  num:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"36px",lineHeight:1},
+  label:{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#555",marginTop:"4px",letterSpacing:"0.1em"},
+  btn:{margin:"0 16px 12px",width:"calc(100% - 32px)",background:"#d4ff00",border:"none",borderRadius:"16px",padding:"18px",fontFamily:"'Bebas Neue',sans-serif",fontSize:"22px",letterSpacing:"0.06em",color:"#000",cursor:"pointer",minHeight:"58px"},
   tabRow:{display:"flex",margin:"0 16px 16px",background:"#1a1a1a",borderRadius:"12px",padding:"4px",border:"1px solid #222"},
-  tab:{flex:1,padding:"10px",textAlign:"center",fontSize:"14px",fontWeight:"500",color:"#555",borderRadius:"10px",cursor:"pointer",transition:"all 0.2s"},
+  tab:{flex:1,padding:"10px",textAlign:"center",fontFamily:"'DM Sans',sans-serif",fontSize:"14px",fontWeight:"500",color:"#555",borderRadius:"10px",cursor:"pointer",transition:"all 0.2s"},
   tabActive:{background:"#d4ff00",color:"#000"},
-  notice:{margin:"0 16px 12px",background:"rgba(212,255,0,0.1)",border:"1px solid rgba(212,255,0,0.3)",borderRadius:"12px",padding:"12px 16px",fontSize:"14px",color:"#d4ff00",textAlign:"center"},
+  notice:{margin:"0 16px 12px",background:"rgba(212,255,0,0.1)",border:"1px solid rgba(212,255,0,0.3)",borderRadius:"12px",padding:"12px 16px",fontFamily:"'DM Sans',sans-serif",fontSize:"14px",color:"#d4ff00",textAlign:"center"},
   card:{margin:"0 16px 10px",background:"#1a1a1a",borderRadius:"20px",padding:"18px",border:"1px solid #222"},
   cardHighlight:{border:"1px solid rgba(212,255,0,0.4)",background:"rgba(212,255,0,0.03)"},
   cardTop:{display:"flex",alignItems:"center",gap:"12px",marginBottom:"14px"},
-  cardAvatar:{width:"46px",height:"46px",borderRadius:"50%",background:"#2a2a2a",border:"1px solid #444",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"18px",fontWeight:"600",color:"#f5f0e8",flexShrink:0},
+  cardAvatar:{width:"46px",height:"46px",borderRadius:"50%",background:"linear-gradient(135deg,#d4ff00,#ff5c1a)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:"20px",fontWeight:"700",color:"#000",flexShrink:0},
   cardUser:{flex:1},
-  cardName:{fontSize:"15px",fontWeight:"500",color:"#f5f0e8"},
-  cardTime:{fontSize:"12px",color:"#555",fontFamily:"monospace",marginTop:"2px"},
-  statusBadge:{fontSize:"11px",fontWeight:"500",padding:"6px 12px",borderRadius:"20px",fontFamily:"monospace",letterSpacing:"0.05em"},
-  cardDesc:{fontSize:"15px",color:"rgba(245,240,232,0.7)",lineHeight:"1.5",marginBottom:"14px"},
+  cardName:{fontFamily:"'DM Sans',sans-serif",fontSize:"15px",fontWeight:"500",color:"#f5f0e8"},
+  cardTime:{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#555",marginTop:"2px"},
+  statusBadge:{fontFamily:"'DM Mono',monospace",fontSize:"10px",fontWeight:"500",padding:"6px 12px",borderRadius:"20px",letterSpacing:"0.06em"},
+  cardDesc:{fontFamily:"'DM Sans',sans-serif",fontSize:"15px",color:"rgba(245,240,232,0.7)",lineHeight:"1.5",marginBottom:"14px"},
   forfeitRow:{background:"#222",borderRadius:"12px",padding:"12px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px"},
-  forfeitLabel:{fontSize:"11px",color:"#555",letterSpacing:"0.08em",fontFamily:"monospace"},
-  forfeitVal:{fontSize:"15px",fontWeight:"500",color:"#ff5c1a"},
+  forfeitLabel:{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#555",letterSpacing:"0.1em"},
+  forfeitVal:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"18px",color:"#ff5c1a",letterSpacing:"0.03em"},
   actionBtns:{display:"flex",flexDirection:"column",gap:"8px"},
-  acceptBtn:{width:"100%",background:"#d4ff00",border:"none",borderRadius:"12px",padding:"16px",fontSize:"16px",fontWeight:"700",color:"#000",cursor:"pointer",minHeight:"52px"},
-  acceptNote:{fontSize:"12px",color:"#555",textAlign:"center"},
-  waitingMsg:{background:"rgba(74,158,255,0.1)",border:"1px solid rgba(74,158,255,0.2)",borderRadius:"12px",padding:"12px 16px",fontSize:"14px",color:"#4a9eff",textAlign:"center"},
-  viewProofBtn:{width:"100%",marginTop:"8px",background:"transparent",border:"1px solid #444",borderRadius:"12px",padding:"12px",fontSize:"14px",color:"#888",cursor:"pointer",minHeight:"48px"},
+  acceptBtn:{width:"100%",background:"#d4ff00",border:"none",borderRadius:"12px",padding:"16px",fontFamily:"'Bebas Neue',sans-serif",fontSize:"20px",letterSpacing:"0.06em",color:"#000",cursor:"pointer",minHeight:"52px"},
+  acceptNote:{fontFamily:"'DM Sans',sans-serif",fontSize:"12px",color:"#555",textAlign:"center"},
+  waitingMsg:{background:"rgba(74,158,255,0.1)",border:"1px solid rgba(74,158,255,0.2)",borderRadius:"12px",padding:"12px 16px",fontFamily:"'DM Sans',sans-serif",fontSize:"14px",color:"#4a9eff",textAlign:"center"},
+  viewProofBtn:{width:"100%",marginTop:"8px",background:"transparent",border:"1px solid #444",borderRadius:"12px",padding:"12px",fontFamily:"'Bebas Neue',sans-serif",fontSize:"16px",letterSpacing:"0.04em",color:"#888",cursor:"pointer",minHeight:"48px"},
   center:{display:"flex",flexDirection:"column",alignItems:"center",padding:"48px 16px",gap:"12px"},
-  loadingText:{color:"#555",fontSize:"14px",fontFamily:"monospace"},
+  loadingText:{fontFamily:"'DM Mono',monospace",color:"#555",fontSize:"13px"},
   emptyIcon:{fontSize:"48px"},
-  emptyText:{color:"#666",fontSize:"16px",fontWeight:"500"},
-  emptySubText:{color:"#444",fontSize:"14px",textAlign:"center",lineHeight:"1.5"},
+  emptyText:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"26px",color:"#555",letterSpacing:"0.04em"},
+  emptySubText:{fontFamily:"'DM Sans',sans-serif",color:"#333",fontSize:"14px",textAlign:"center",lineHeight:"1.5"},
 };

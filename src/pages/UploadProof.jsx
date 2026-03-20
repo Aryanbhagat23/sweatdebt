@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-
 import { useNavigate, useParams } from "react-router-dom";
 import { db } from "../firebase";
 import { doc, updateDoc, addDoc, collection, serverTimestamp } from "firebase/firestore";
@@ -168,29 +167,29 @@ export default function UploadProof({ user }) {
 
 const S = {
   page:{minHeight:"100vh",background:"#111",paddingBottom:"40px"},
-  header:{display:"flex",alignItems:"center",gap:"12px",padding:"20px 20px 16px"},
-  back:{background:"#1a1a1a",border:"1px solid #333",borderRadius:"50%",width:"36px",height:"36px",color:"#f5f0e8",fontSize:"18px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"},
-  title:{fontSize:"22px",fontWeight:"700",color:"#f5f0e8"},
+  header:{display:"flex",alignItems:"center",gap:"12px",padding:"52px 16px 16px"},
+  back:{background:"#1a1a1a",border:"1px solid #333",borderRadius:"50%",width:"44px",height:"44px",color:"#f5f0e8",fontSize:"20px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
+  title:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"28px",color:"#f5f0e8",letterSpacing:"0.04em"},
   content:{padding:"0 20px"},
   iconWrap:{textAlign:"center",marginBottom:"20px",marginTop:"20px"},
   bigIcon:{fontSize:"64px"},
-  heading:{fontSize:"24px",fontWeight:"700",color:"#f5f0e8",textAlign:"center",marginBottom:"10px"},
-  subheading:{fontSize:"14px",color:"#666",textAlign:"center",lineHeight:"1.6",marginBottom:"28px"},
-  rules:{background:"#1a1a1a",borderRadius:"16px",padding:"16px 20px",marginBottom:"28px",border:"1px solid #333"},
-  rulesTitle:{fontSize:"10px",color:"#555",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:"12px",fontFamily:"monospace"},
-  ruleItem:{fontSize:"13px",color:"#888",lineHeight:"1.8",display:"flex",gap:"8px"},
+  heading:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"32px",color:"#f5f0e8",textAlign:"center",marginBottom:"10px",letterSpacing:"0.03em"},
+  subheading:{fontFamily:"'DM Sans',sans-serif",fontSize:"15px",color:"#666",textAlign:"center",lineHeight:"1.6",marginBottom:"28px"},
+  rules:{background:"#1a1a1a",borderRadius:"16px",padding:"16px 20px",marginBottom:"28px",border:"1px solid #222"},
+  rulesTitle:{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#555",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:"12px"},
+  ruleItem:{fontFamily:"'DM Sans',sans-serif",fontSize:"14px",color:"#888",lineHeight:"1.8",display:"flex",gap:"8px"},
   ruleDot:{color:"#d4ff00",flexShrink:0},
   progressWrap:{marginBottom:"16px"},
-  progressLabel:{fontSize:"12px",color:"#d4ff00",fontFamily:"monospace",marginBottom:"6px",textAlign:"center"},
+  progressLabel:{fontFamily:"'DM Mono',monospace",fontSize:"12px",color:"#d4ff00",marginBottom:"6px",textAlign:"center"},
   progressTrack:{height:"4px",background:"#333",borderRadius:"2px"},
   progressBar:{height:"100%",background:"#d4ff00",borderRadius:"2px",transition:"width 0.3s"},
-  uploadBtn:{width:"100%",background:"#d4ff00",border:"none",borderRadius:"12px",padding:"18px",fontSize:"16px",fontWeight:"700",color:"#000",cursor:"pointer"},
+  uploadBtn:{width:"100%",background:"#d4ff00",border:"none",borderRadius:"12px",padding:"18px",fontFamily:"'Bebas Neue',sans-serif",fontSize:"22px",letterSpacing:"0.06em",color:"#000",cursor:"pointer"},
   successWrap:{textAlign:"center",padding:"24px 0 20px"},
   successIcon:{fontSize:"56px",marginBottom:"12px"},
-  successTitle:{fontSize:"24px",fontWeight:"700",color:"#f5f0e8",marginBottom:"8px"},
-  successSub:{fontSize:"14px",color:"#666",lineHeight:"1.6",marginBottom:"20px"},
+  successTitle:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"36px",color:"#f5f0e8",marginBottom:"8px",letterSpacing:"0.03em"},
+  successSub:{fontFamily:"'DM Sans',sans-serif",fontSize:"14px",color:"#666",lineHeight:"1.6",marginBottom:"20px"},
   videoPreview:{width:"100%",borderRadius:"12px",marginBottom:"16px",background:"#000"},
-  honourNote:{fontSize:"13px",color:"#666",textAlign:"center",marginBottom:"20px"},
-  doneBtn:{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:"12px",padding:"16px",fontSize:"16px",fontWeight:"600",color:"#f5f0e8",cursor:"pointer",marginBottom:"10px"},
-  feedBtn:{width:"100%",background:"transparent",border:"1px solid #d4ff00",borderRadius:"12px",padding:"16px",fontSize:"16px",fontWeight:"600",color:"#d4ff00",cursor:"pointer"},
+  honourNote:{fontFamily:"'DM Sans',sans-serif",fontSize:"13px",color:"#666",textAlign:"center",marginBottom:"20px"},
+  doneBtn:{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:"12px",padding:"16px",fontFamily:"'Bebas Neue',sans-serif",fontSize:"20px",letterSpacing:"0.06em",color:"#f5f0e8",cursor:"pointer",marginBottom:"10px"},
+  feedBtn:{width:"100%",background:"transparent",border:"1px solid #d4ff00",borderRadius:"12px",padding:"16px",fontFamily:"'Bebas Neue',sans-serif",fontSize:"20px",letterSpacing:"0.06em",color:"#d4ff00",cursor:"pointer"},
 };

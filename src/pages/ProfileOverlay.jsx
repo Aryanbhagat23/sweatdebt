@@ -200,32 +200,49 @@ export default function ProfileOverlay({ user, isOpen, onClose }) {
         {screen === "main" && (
           <>
             {/* Header */}
-            <div style={{display:"flex",alignItems:"center",gap:"14px",padding:"16px 20px 8px"}}>
-              <div style={{
-                width:"54px",height:"54px",borderRadius:"50%",
-                background:"linear-gradient(135deg,#d4ff00,#ff5c1a)",
-                display:"flex",alignItems:"center",justifyContent:"center",
-                fontSize:"22px",fontWeight:"700",color:"#000",flexShrink:0,
-              }}>{user?.displayName?.charAt(0)||"?"}</div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:"18px",fontWeight:"700",color:text}}>{user?.displayName}</div>
-                <div style={{fontSize:"12px",color:text2,fontFamily:"monospace"}}>
-                  {friends} friends · {winRate}% win rate
-                </div>
-              </div>
-              <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
-                <div className="tap-scale" style={{
-                  width:"36px",height:"36px",borderRadius:"10px",
-                  background:bg2,display:"flex",alignItems:"center",
-                  justifyContent:"center",fontSize:"18px",cursor:"pointer",
-                }} onClick={()=>setScreen("settings")}>⚙️</div>
-                <div className="tap-scale" style={{
-                  width:"36px",height:"36px",borderRadius:"50%",
-                  background:bg2,display:"flex",alignItems:"center",
-                  justifyContent:"center",fontSize:"14px",color:text2,cursor:"pointer",
-                }} onClick={onClose}>✕</div>
-              </div>
-            </div>
+<div style={{display:"flex",alignItems:"center",gap:"14px",padding:"16px 20px 8px"}}>
+  {/* Avatar with photo */}
+  <div style={{position:"relative",cursor:"pointer"}} onClick={()=>{onClose();setTimeout(()=>navigate("/edit-profile"),300);}}>
+    {user?.photoURL ? (
+      <img src={user.photoURL} alt={user.displayName}
+        style={{width:"54px",height:"54px",borderRadius:"50%",objectFit:"cover",border:"2px solid #d4ff00"}}
+      />
+    ) : (
+      <div style={{
+        width:"54px",height:"54px",borderRadius:"50%",
+        background:"linear-gradient(135deg,#d4ff00,#ff5c1a)",
+        display:"flex",alignItems:"center",justifyContent:"center",
+        fontSize:"22px",fontWeight:"700",color:"#000",flexShrink:0,
+      }}>{user?.displayName?.charAt(0)||"?"}</div>
+    )}
+    {/* Edit badge */}
+    <div style={{
+      position:"absolute",bottom:"-2px",right:"-2px",
+      width:"20px",height:"20px",borderRadius:"50%",
+      background:"#d4ff00",display:"flex",alignItems:"center",
+      justifyContent:"center",fontSize:"10px",border:"2px solid #1a1a1a",
+    }}>✏️</div>
+  </div>
+
+  <div style={{flex:1}}>
+    <div style={{fontSize:"18px",fontWeight:"700",color:text}}>{user?.displayName}</div>
+    <div style={{fontSize:"12px",color:text2,fontFamily:"monospace"}}>
+      @{user?.displayName?.toLowerCase().replace(/\s/g,"")} · {friends} friends · {winRate}% win rate
+    </div>
+  </div>
+  <div style={{display:"flex",gap:"8px",alignItems:"center"}}>
+    <div style={{
+      width:"36px",height:"36px",borderRadius:"10px",
+      background:bg2,display:"flex",alignItems:"center",
+      justifyContent:"center",fontSize:"18px",cursor:"pointer",
+    }} onClick={()=>setScreen("settings")}>⚙️</div>
+    <div style={{
+      width:"36px",height:"36px",borderRadius:"50%",
+      background:bg2,display:"flex",alignItems:"center",
+      justifyContent:"center",fontSize:"14px",color:text2,cursor:"pointer",
+    }} onClick={onClose}>✕</div>
+  </div>
+</div>
 
             {/* 3 stat cards */}
             <div style={{display:"flex",gap:"8px",padding:"8px 20px 16px"}}>
@@ -314,6 +331,7 @@ export default function ProfileOverlay({ user, isOpen, onClose }) {
                 {icon:"🎥",label:"My Videos",sub:`${videos.length} forfeit videos`,action:()=>setActiveSection(activeSection==="videos"?null:"videos")},
                 {icon:"🏆",label:"Leaderboard",sub:"See your ranking",action:()=>goTo("/leaderboard")},
                 {icon:"⚙️",label:"Settings",sub:"Appearance, privacy, notifications",action:()=>setScreen("settings")},
+                {icon:"✏️",label:"Edit Profile",sub:"Change username, photo, bio",action:()=>{onClose();setTimeout(()=>navigate("/edit-profile"),300);}},
               ].map((item,i)=>(
                 <div key={item.label}>
                   <div className="tap-scale stagger" style={{

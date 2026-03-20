@@ -3,6 +3,7 @@ import { auth, db } from "../firebase";
 import { signOut } from "firebase/auth";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
+import PageTransition from "../components/PageTransition";
 
 export default function Profile({ user }) {
   const navigate = useNavigate();
@@ -41,6 +42,7 @@ export default function Profile({ user }) {
   ];
 
   return (
+     <PageTransition>
     <div style={S.page}>
       {/* Header */}
       <div style={S.header}>
@@ -175,7 +177,7 @@ export default function Profile({ user }) {
           </div>
         </>
       )}
-    </div>
+    </div></PageTransition>
   );
 }
 
