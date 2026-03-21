@@ -23,7 +23,7 @@ const C = {
 
 function NavBar({ user, onProfileOpen, onBellOpen }) {
   const location = useLocation();
-  const hideNav = ["/create","/upload","/edit-profile","/friends","/profile"].some(...)
+  const hideNav = ["/create", "/upload", "/edit-profile", "/friends", "/profile/"].some(p => location.pathname.startsWith(p));
   if (hideNav) return null;
 
   return (
