@@ -75,6 +75,7 @@ export default function CreateBet({ user }) {
         createdBy: user.uid,
         createdByName: user.displayName,
         createdByEmail: user.email,
+        betCreatedBy: user.uid,
         status: "pending",
         createdAt: serverTimestamp(),
       });

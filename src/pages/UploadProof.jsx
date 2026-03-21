@@ -30,6 +30,7 @@ export default function UploadProof({ user }) {
         uploadedByName: user.displayName,
         uploadedByEmail: user.email,
         uploaderPhoto: user.photoURL || null,
+        betCreatedBy: null,
         createdAt: serverTimestamp(),
         likes: 0,
         comments: 0,
