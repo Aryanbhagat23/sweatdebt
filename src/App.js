@@ -13,6 +13,7 @@ import FindFriends from "./pages/FindFriends";
 import Toast from "./components/Toast";
 import NotificationBell from "./components/NotificationBell";
 import NotificationCenter from "./components/NotificationCenter";
+import UserProfile from "./pages/UserProfile";
 
 const C = {
   bg0:"#070d1a",bg1:"#0d1629",bg2:"#111f38",
@@ -22,7 +23,7 @@ const C = {
 
 function NavBar({ user, onProfileOpen, onBellOpen }) {
   const location = useLocation();
-  const hideNav = ["/create","/upload","/edit-profile","/friends"].some(p=>location.pathname.startsWith(p));
+  const hideNav = ["/create","/upload","/edit-profile","/friends","/profile"].some(...)
   if (hideNav) return null;
 
   return (
@@ -96,6 +97,7 @@ function AppContent({ user }) {
         <Route path="/upload" element={<UploadProof user={user}/>}/>
         <Route path="/edit-profile" element={<EditProfile user={user}/>}/>
         <Route path="/friends" element={<FindFriends user={user}/>}/>
+        <Route path="/profile/:userId" element={<UserProfile currentUser={user}/>}/>
       </Routes>
 
       <NavBar user={user} onProfileOpen={()=>setProfileOpen(true)} onBellOpen={()=>setNotifOpen(true)}/>
