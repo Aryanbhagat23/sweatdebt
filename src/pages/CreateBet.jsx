@@ -1,50 +1,86 @@
-import React, { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
 import { db } from "../firebase";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, addDoc, getDocs, serverTimestamp } from "firebase/firestore";
 
-const forfeits = [
-  { id:"pushups", icon:"💪", name:"Pushups", desc:"Upper body" },
-  { id:"run", icon:"🏃", name:"Run", desc:"GPS tracked" },
-  { id:"burpees", icon:"🔥", name:"Burpees", desc:"Full body" },
-  { id:"squats", icon:"🦵", name:"Squats", desc:"Legs day" },
-  { id:"plank", icon:"🧘", name:"Plank", desc:"Core strength" },
-  { id:"custom", icon:"✏️", name:"Custom", desc:"Your choice" },
+const C = {
+  bg0:"#070d1a", bg1:"#0d1629", bg2:"#111f38", bg3:"#172847",
+  white:"#e0f2fe", muted:"#64748b", dim:"#3d5a7a",
+  cyan:"#00d4ff", cyanDim:"rgba(0,212,255,0.12)", cyanBorder:"rgba(0,212,255,0.3)",
+  coral:"#ff6b4a", green:"#00e676", red:"#ff4d6d",
+  border1:"#1e3a5f", border2:"#2a4f7a", purple:"#a855f7",
+};
+
+const FORFEITS = [
+  { key:"pushups", icon:"💪", name:"Push-ups", desc:"Upper body burn" },
+  { key:"run", icon:"🏃", name:"Run", desc:"Cardio punishment" },
+  { key:"burpees", icon:"🔥", name:"Burpees", desc:"Full body hell" },
+  { key:"squats", icon:"🦵", name:"Squats", desc:"Leg day special" },
+  { key:"plank", icon:"🧘", name:"Plank", desc:"Core torture" },
+  { key:"custom", icon:"✏️", name:"Custom", desc:"Your own forfeit" },
 ];
 
-import { useLocation } from "react-router-dom";
+const EXAMPLES = [
+  "I'll hit the gym every day this week",
+  "I can beat you in a 5k run",
+  "I'll finish this project before Friday",
+  "I won't eat junk food for 7 days",
+  "I can do more pullups than you",
+];
 
 export default function CreateBet({ user }) {
   const navigate = useNavigate();
   const location = useLocation();
   const prefilledOpponent = location.state?.opponent;
 
-  const [step, setStep] = useState(prefilledOpponent ? 2 : 1);
+  const [step, setStep] = useState(1);
   const [betDesc, setBetDesc] = useState("");
   const [forfeit, setForfeit] = useState(null);
   const [reps, setReps] = useState("");
   const [opponentEmail, setOpponentEmail] = useState(prefilledOpponent?.email || "");
   const [opponentName, setOpponentName] = useState(prefilledOpponent?.displayName || "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [recentFriends, setRecentFriends] = useState([]);
 
-  const submitBet = async () => {
+  // Load friends for quick select
+  useEffect(() => {
+    if (!user) return;
+    getDocs(collection(db,"users",user.uid,"friends")).then(snap=>{
+      setRecentFriends(snap.docs.map(d=>({id:d.id,...d.data()})).slice(0,5));
+    }).catch(()=>{});
+  }, [user]);
+
+  const totalSteps = 3;
+  const progress = (step/totalSteps)*100;
+
+  const canNext = () => {
+    if (step===1) return betDesc.trim().length>=5;
+    if (step===2) return forfeit&&reps;
+    if (step===3) return opponentEmail.trim().length>0;
+    return false;
+  };
+
+  const handleSubmit = async () => {
+    if (!opponentEmail.trim()) { setError("Please enter opponent email"); return; }
     setLoading(true);
     setError("");
     try {
-      await addDoc(collection(db, "bets"), {
-        description: betDesc,
-        forfeit: forfeit,
-        reps: reps,
+      await addDoc(collection(db,"bets"),{
+        description: betDesc.trim(),
+        forfeit,
+        reps,
+        opponentEmail: opponentEmail.trim().toLowerCase(),
+        opponentName: opponentName||opponentEmail.split("@")[0],
         createdBy: user.uid,
         createdByName: user.displayName,
         createdByEmail: user.email,
-        opponentEmail: opponentEmail,
         status: "pending",
         createdAt: serverTimestamp(),
-        honourScore: 100,
       });
       navigate("/bets");
-    } catch (e) {
-      setError("Something went wrong. Try again.");
+    } catch(e) {
+      setError("Failed to create bet. Please try again.");
       console.error(e);
     }
     setLoading(false);
@@ -54,169 +90,206 @@ export default function CreateBet({ user }) {
     <div style={S.page}>
       {/* Header */}
       <div style={S.header}>
-        <button style={S.back} onClick={() => step > 1 ? setStep(step-1) : navigate("/bets")}>←</button>
-        <div style={S.title}>New Bet</div>
-        <div style={S.stepCount}>{step}/3</div>
+        <button style={S.back} onClick={()=>step>1?setStep(step-1):navigate("/bets")}>←</button>
+        <div style={S.title}>New <span style={{color:C.cyan}}>Bet</span></div>
+        <div style={{fontFamily:"'DM Mono',monospace",fontSize:"13px",color:C.muted}}>{step}/{totalSteps}</div>
       </div>
 
       {/* Progress bar */}
       <div style={S.progressWrap}>
-        <div style={{...S.progressBar, width:`${(step/3)*100}%`}}/>
+        <div style={{...S.progressBar,width:`${progress}%`}}/>
       </div>
 
-      {/* STEP 1 — The bet */}
-      {step === 1 && (
-        <div style={S.stepWrap}>
-          <div style={S.stepTitle}>What's the bet?</div>
-          <div style={S.stepSub}>Be specific — "Liverpool will beat Man City" not just "football"</div>
-          <textarea
-            style={S.textarea}
-            placeholder="e.g. 'Lakers will beat the Celtics by more than 10 points this Friday'"
-            value={betDesc}
-            onChange={e => setBetDesc(e.target.value)}
-            rows={4}
-          />
-          <div style={S.charCount}>{betDesc.length} / 200</div>
-
-          <div style={S.examplesLabel}>Quick ideas</div>
-          <div style={S.examples}>
-            {["My team wins tonight","I finish this workout","I wake up before 7am","I don't eat junk food today"].map(ex => (
-              <div key={ex} style={S.examplePill} onClick={() => setBetDesc(ex)}>{ex}</div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* STEP 2 — Forfeit */}
-      {step === 2 && (
-        <div style={S.stepWrap}>
-          <div style={S.stepTitle}>Set the forfeit</div>
-          <div style={S.stepSub}>Loser has to do this — on camera</div>
-
-          <div style={S.forfeitGrid}>
-            {forfeits.map(f => (
-              <div
-                key={f.id}
-                style={{...S.forfeitOpt, ...(forfeit===f.id ? S.forfeitSelected : {})}}
-                onClick={() => setForfeit(f.id)}
-              >
-                <div style={S.forfeitIcon}>{f.icon}</div>
-                <div style={S.forfeitName}>{f.name}</div>
-                <div style={S.forfeitDesc}>{f.desc}</div>
-              </div>
-            ))}
-          </div>
-
-          <div style={S.repsLabel}>
-            {forfeit === "run" ? "Distance (km)" : forfeit === "plank" ? "Duration (seconds)" : "How many reps?"}
-          </div>
-          <input
-            style={S.input}
-            type="number"
-            placeholder={forfeit === "run" ? "e.g. 2" : "e.g. 50"}
-            value={reps}
-            onChange={e => setReps(e.target.value)}
-            min="1"
-          />
-
-          {forfeit === "custom" && (
-            <input
-              style={{...S.input, marginTop:"8px"}}
-              placeholder="Describe the custom forfeit..."
-              value={reps}
-              onChange={e => setReps(e.target.value)}
+      <div style={S.content}>
+        {/* STEP 1 — Bet description */}
+        {step===1&&(
+          <div>
+            <div style={S.stepTitle}>What's <span style={{color:C.cyan}}>the bet?</span></div>
+            <div style={S.stepSub}>Describe what you're betting on. Be specific!</div>
+            <textarea
+              style={S.textarea}
+              value={betDesc}
+              onChange={e=>setBetDesc(e.target.value)}
+              placeholder="e.g. I'll run 5km under 25 minutes this Sunday..."
+              rows={4}
+              maxLength={200}
             />
-          )}
-        </div>
-      )}
-
-      {/* STEP 3 — Opponent */}
-      {/* STEP 3 — Opponent */}
-{step === 3 && (
-  <div style={S.stepWrap}>
-    <div style={S.stepTitle}>Challenge someone</div>
-    <div style={S.stepSub}>Enter their email or search for friends</div>
-
-    {/* Find friends button */}
-    <div style={{
-      background:"rgba(212,255,0,0.08)",
-      border:"1px solid rgba(212,255,0,0.3)",
-      borderRadius:"14px",padding:"14px 16px",
-      marginBottom:"16px",cursor:"pointer",
-      display:"flex",alignItems:"center",gap:"12px",
-    }} onClick={()=>navigate("/friends")}>
-      <span style={{fontSize:"20px"}}>🔍</span>
-      <div>
-        <div style={{fontSize:"15px",fontWeight:"500",color:"#d4ff00"}}>Search for a friend</div>
-        <div style={{fontSize:"12px",color:"#666",marginTop:"2px"}}>Find users by name or username</div>
-      </div>
-      <div style={{marginLeft:"auto",color:"#d4ff00",fontSize:"18px"}}>›</div>
-    </div>
-
-    <div style={{fontSize:"12px",color:"#555",textAlign:"center",margin:"0 0 12px",fontFamily:"monospace"}}>— or enter email directly —</div>
-
-    {/* Pre-filled opponent card */}
-    {opponentName ? (
-      <div style={{background:"#1a1a1a",border:"1px solid rgba(212,255,0,0.4)",borderRadius:"14px",padding:"14px 16px",marginBottom:"12px",display:"flex",alignItems:"center",gap:"12px"}}>
-        <div style={{width:"40px",height:"40px",borderRadius:"50%",background:"linear-gradient(135deg,#d4ff00,#ff5c1a)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",fontWeight:"700",color:"#000"}}>
-          {opponentName.charAt(0)}
-        </div>
-        <div style={{flex:1}}>
-          <div style={{fontSize:"15px",fontWeight:"500",color:"#f5f0e8"}}>{opponentName}</div>
-          <div style={{fontSize:"12px",color:"#666",fontFamily:"monospace"}}>{opponentEmail}</div>
-        </div>
-        <div style={{color:"#00e676",fontSize:"18px"}}>✓</div>
-      </div>
-    ):(
-      <input
-        style={S.input}
-        type="email"
-        placeholder="friend@gmail.com"
-        value={opponentEmail}
-        onChange={e=>setOpponentEmail(e.target.value)}
-      />
-    )}
-
-          {/* Bet summary */}
-          <div style={S.summary}>
-            <div style={S.summaryLabel}>BET SUMMARY</div>
-            <div style={S.summaryRow}>
-              <span style={S.summaryKey}>The bet</span>
-              <span style={S.summaryVal}>{betDesc}</span>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:C.muted,textAlign:"right",marginTop:"6px"}}>
+              {betDesc.length}/200
             </div>
-            <div style={S.summaryRow}>
-              <span style={S.summaryKey}>Forfeit</span>
-              <span style={S.summaryVal}>
-                {forfeits.find(f=>f.id===forfeit)?.icon} {reps} {forfeits.find(f=>f.id===forfeit)?.name}
-              </span>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:C.muted,letterSpacing:"0.1em",textTransform:"uppercase",marginTop:"24px",marginBottom:"12px"}}>
+              Quick ideas
             </div>
-            <div style={S.summaryRow}>
-              <span style={S.summaryKey}>Stakes</span>
-              <span style={{...S.summaryVal, color:"#ff5c1a"}}>Loser posts the proof 📹</span>
+            <div style={{display:"flex",flexWrap:"wrap",gap:"8px"}}>
+              {EXAMPLES.map(ex=>(
+                <div key={ex} style={{
+                  background:C.bg2,border:`1px solid ${C.border1}`,
+                  borderRadius:"20px",padding:"10px 16px",
+                  fontFamily:"'DM Sans',sans-serif",fontSize:"13px",color:C.muted,
+                  cursor:"pointer",transition:"all 0.2s",
+                }} onClick={()=>setBetDesc(ex)}>{ex}</div>
+              ))}
             </div>
           </div>
+        )}
 
-          {error && <div style={S.error}>{error}</div>}
-        </div>
-      )}
+        {/* STEP 2 — Forfeit */}
+        {step===2&&(
+          <div>
+            <div style={S.stepTitle}>Choose the <span style={{color:C.coral}}>forfeit</span></div>
+            <div style={S.stepSub}>What does the loser have to do?</div>
+            <div style={S.forfeitGrid}>
+              {FORFEITS.map(f=>(
+                <div key={f.key} style={{
+                  ...S.forfeitOpt,
+                  border:forfeit===f.key?`2px solid ${C.cyan}`:`1px solid ${C.border1}`,
+                  background:forfeit===f.key?C.cyanDim:C.bg2,
+                  transform:forfeit===f.key?"scale(1.02)":"scale(1)",
+                }} onClick={()=>setForfeit(f.key)}>
+                  <div style={{fontSize:"32px",marginBottom:"8px"}}>{f.icon}</div>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"18px",color:forfeit===f.key?C.cyan:C.white,letterSpacing:"0.04em"}}>{f.name}</div>
+                  <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"11px",color:C.muted,marginTop:"3px"}}>{f.desc}</div>
+                </div>
+              ))}
+            </div>
+
+            {forfeit&&(
+              <div>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:C.muted,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:"10px"}}>
+                  {forfeit==="run"?"DISTANCE (KM)":forfeit==="plank"?"DURATION (SEC)":"NUMBER OF REPS"}
+                </div>
+                <input
+                  style={S.input}
+                  type="number"
+                  placeholder={forfeit==="run"?"e.g. 5":forfeit==="plank"?"e.g. 60":"e.g. 20"}
+                  value={reps}
+                  onChange={e=>setReps(e.target.value)}
+                  min="1"
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* STEP 3 — Opponent */}
+        {step===3&&(
+          <div>
+            <div style={S.stepTitle}>Challenge <span style={{color:C.purple}}>someone</span></div>
+            <div style={S.stepSub}>Who are you betting against?</div>
+
+            {/* Find friends button */}
+            <div style={{
+              background:C.cyanDim,border:`1px solid ${C.cyanBorder}`,
+              borderRadius:"14px",padding:"14px 16px",marginBottom:"16px",
+              cursor:"pointer",display:"flex",alignItems:"center",gap:"12px",
+            }} onClick={()=>navigate("/friends",{state:{returnTo:"/create",bet:{description:betDesc,forfeit,reps}}})}>
+              <span style={{fontSize:"20px"}}>🔍</span>
+              <div style={{flex:1}}>
+                <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"15px",fontWeight:"500",color:C.cyan}}>Search for a friend</div>
+                <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"12px",color:C.muted,marginTop:"2px"}}>Find users by name or @username</div>
+              </div>
+              <div style={{color:C.cyan,fontSize:"18px"}}>›</div>
+            </div>
+
+            {/* Recent friends */}
+            {recentFriends.length>0&&(
+              <>
+                <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:C.muted,letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:"10px"}}>
+                  Recent Friends
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:"8px",marginBottom:"16px"}}>
+                  {recentFriends.map(f=>(
+                    <div key={f.id} style={{
+                      display:"flex",alignItems:"center",gap:"14px",
+                      background:opponentEmail===f.email?C.cyanDim:C.bg2,
+                      border:opponentEmail===f.email?`1px solid ${C.cyanBorder}`:`1px solid ${C.border1}`,
+                      borderRadius:"14px",padding:"14px",cursor:"pointer",
+                    }} onClick={()=>{ setOpponentEmail(f.email); setOpponentName(f.displayName); }}>
+                      {f.photoURL?(
+                        <img src={f.photoURL} alt="" style={{width:"40px",height:"40px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${C.border2}`,flexShrink:0}}/>
+                      ):(
+                        <div style={{width:"40px",height:"40px",borderRadius:"50%",background:`linear-gradient(135deg,${C.cyan},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:"16px",color:"#000",flexShrink:0}}>
+                          {f.displayName?.charAt(0)||"?"}
+                        </div>
+                      )}
+                      <div style={{flex:1}}>
+                        <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"15px",fontWeight:"500",color:C.white}}>{f.displayName}</div>
+                        <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:C.muted}}>{f.email}</div>
+                      </div>
+                      {opponentEmail===f.email&&<div style={{color:C.green,fontSize:"18px"}}>✓</div>}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:C.muted,textAlign:"center",marginBottom:"12px",letterSpacing:"0.06em"}}>
+              — or enter email directly —
+            </div>
+
+            {/* Pre-filled from search */}
+            {opponentName?(
+              <div style={{background:C.bg2,border:`1px solid ${C.cyanBorder}`,borderRadius:"14px",padding:"14px 16px",marginBottom:"12px",display:"flex",alignItems:"center",gap:"12px"}}>
+                <div style={{width:"40px",height:"40px",borderRadius:"50%",background:`linear-gradient(135deg,${C.cyan},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:"16px",color:"#000",flexShrink:0}}>
+                  {opponentName.charAt(0)}
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"15px",fontWeight:"500",color:C.white}}>{opponentName}</div>
+                  <div style={{fontFamily:"'DM Mono',monospace",fontSize:"12px",color:C.muted}}>{opponentEmail}</div>
+                </div>
+                <div style={{color:C.green,fontSize:"20px"}}>✓</div>
+              </div>
+            ):(
+              <input
+                style={S.input}
+                type="email"
+                placeholder="friend@gmail.com"
+                value={opponentEmail}
+                onChange={e=>setOpponentEmail(e.target.value)}
+              />
+            )}
+
+            {/* Summary */}
+            <div style={S.summary}>
+              <div style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:C.muted,letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:"14px"}}>BET SUMMARY</div>
+              {[
+                {label:"Bet",val:betDesc},
+                {label:"Forfeit",val:`${FORFEITS.find(f=>f.key===forfeit)?.icon||""} ${reps} ${forfeit}`},
+                {label:"Challenging",val:opponentName||opponentEmail||"—"},
+              ].map(r=>(
+                <div key={r.label} style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px",gap:"16px"}}>
+                  <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"14px",color:C.muted,flexShrink:0}}>{r.label}</div>
+                  <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"14px",color:C.white,textAlign:"right",lineHeight:"1.4"}}>{r.val}</div>
+                </div>
+              ))}
+            </div>
+
+            {error&&(
+              <div style={{background:"rgba(255,77,109,0.1)",border:"1px solid rgba(255,77,109,0.3)",borderRadius:"12px",padding:"12px 16px",fontFamily:"'DM Sans',sans-serif",color:C.red,fontSize:"14px",marginTop:"14px"}}>
+                {error}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Bottom button */}
       <div style={S.bottomBtn}>
-        {step < 3 ? (
+        {step<3?(
           <button
-            style={{...S.btn, opacity: (step===1 ? canNext1 : canNext2) ? 1 : 0.4}}
-            disabled={step===1 ? !canNext1 : !canNext2}
-            onClick={() => setStep(step+1)}
+            style={{...S.btn, opacity:canNext()?1:0.4}}
+            disabled={!canNext()}
+            onClick={()=>setStep(step+1)}
           >
             NEXT →
           </button>
-        ) : (
+        ):(
           <button
-            style={{...S.btn, opacity: canSubmit && !loading ? 1 : 0.4}}
-            disabled={!canSubmit || loading}
-            onClick={submitBet}
+            style={{...S.btn, opacity:loading||!canNext()?0.5:1}}
+            disabled={loading||!canNext()}
+            onClick={handleSubmit}
           >
-            {loading ? "SENDING..." : "SEND THE BET ⚔️"}
+            {loading?"SENDING...":`⚔️ SEND CHALLENGE`}
           </button>
         )}
       </div>
@@ -225,41 +298,20 @@ export default function CreateBet({ user }) {
 }
 
 const S = {
-  page:{minHeight:"100vh",background:"#111",paddingBottom:"100px"},
-  header:{display:"flex",alignItems:"center",gap:"12px",padding:"52px 16px 20px"},
-  back:{background:"#1a1a1a",border:"1px solid #333",borderRadius:"50%",width:"44px",height:"44px",color:"#f5f0e8",fontSize:"20px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0},
-  title:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"28px",color:"#f5f0e8",letterSpacing:"0.04em",flex:1},
-  stepCount:{fontFamily:"'DM Mono',monospace",fontSize:"13px",color:"#555"},
-  progressWrap:{height:"4px",background:"#222",margin:"0 16px 28px",borderRadius:"2px"},
-  progressBar:{height:"100%",background:"#d4ff00",borderRadius:"2px",transition:"width 0.3s"},
-  stepWrap:{padding:"0 16px"},
-  stepTitle:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"32px",color:"#f5f0e8",letterSpacing:"0.03em",marginBottom:"8px"},
-  stepSub:{fontFamily:"'DM Sans',sans-serif",fontSize:"15px",color:"#666",marginBottom:"24px",lineHeight:"1.5"},
-  textarea:{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:"16px",padding:"16px",color:"#f5f0e8",fontSize:"16px",fontFamily:"'DM Sans',sans-serif",outline:"none",resize:"none",lineHeight:"1.6"},
-  charCount:{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#444",textAlign:"right",marginTop:"6px"},
-  examplesLabel:{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#555",letterSpacing:"0.1em",textTransform:"uppercase",marginTop:"24px",marginBottom:"12px"},
-  examples:{display:"flex",flexWrap:"wrap",gap:"8px"},
-  examplePill:{background:"#1a1a1a",border:"1px solid #333",borderRadius:"20px",padding:"10px 16px",fontFamily:"'DM Sans',sans-serif",fontSize:"14px",color:"#888",cursor:"pointer",minHeight:"44px",display:"flex",alignItems:"center"},
-  forfeitGrid:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px",marginBottom:"24px"},
-  forfeitOpt:{background:"#1a1a1a",border:"1px solid #333",borderRadius:"16px",padding:"18px",textAlign:"center",cursor:"pointer",transition:"all 0.2s",minHeight:"100px",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"},
-  forfeitSelected:{border:"2px solid #d4ff00",background:"rgba(212,255,0,0.05)"},
-  forfeitIcon:{fontSize:"32px",marginBottom:"8px"},
-  forfeitName:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"18px",color:"#f5f0e8",letterSpacing:"0.04em"},
-  forfeitDesc:{fontFamily:"'DM Sans',sans-serif",fontSize:"12px",color:"#666",marginTop:"3px"},
-  repsLabel:{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#555",letterSpacing:"0.1em",textTransform:"uppercase",marginBottom:"10px"},
-  input:{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:"16px",padding:"16px",color:"#f5f0e8",fontSize:"16px",fontFamily:"'DM Sans',sans-serif",outline:"none",minHeight:"54px"},
-  summary:{background:"#1a1a1a",borderRadius:"20px",padding:"20px",marginTop:"24px",border:"1px solid #333"},
-  summaryLabel:{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#555",letterSpacing:"0.12em",textTransform:"uppercase",marginBottom:"14px"},
-  summaryRow:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px",gap:"16px"},
-  summaryKey:{fontFamily:"'DM Sans',sans-serif",fontSize:"14px",color:"#666",flexShrink:0},
-  summaryVal:{fontFamily:"'DM Sans',sans-serif",fontSize:"15px",color:"#f5f0e8",textAlign:"right",lineHeight:"1.4"},
-  error:{background:"rgba(255,68,68,0.1)",border:"1px solid rgba(255,68,68,0.3)",borderRadius:"12px",padding:"12px 16px",fontFamily:"'DM Sans',sans-serif",color:"#ff4444",fontSize:"14px",marginTop:"14px"},
-  bottomBtn:{position:"fixed",bottom:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"480px",padding:"16px",background:"rgba(17,17,17,0.97)",borderTop:"1px solid #222",paddingBottom:"calc(16px + env(safe-area-inset-bottom))"},
-  btn:{width:"100%",background:"#d4ff00",border:"none",borderRadius:"16px",padding:"18px",fontFamily:"'Bebas Neue',sans-serif",fontSize:"24px",letterSpacing:"0.06em",color:"#000",cursor:"pointer",minHeight:"58px"},
-  friendList:{display:"flex",flexDirection:"column",gap:"10px"},
-  friendItem:{display:"flex",alignItems:"center",gap:"14px",background:"#1a1a1a",border:"1px solid #333",borderRadius:"16px",padding:"16px",cursor:"pointer",transition:"border-color 0.2s",minHeight:"72px"},
-  friendAv:{width:"46px",height:"46px",borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:"18px",color:"#000",flexShrink:0},
-  friendName:{fontFamily:"'DM Sans',sans-serif",fontSize:"16px",fontWeight:"500",color:"#f5f0e8",flex:1},
-  friendRecord:{fontFamily:"'DM Mono',monospace",fontSize:"12px",color:"#555"},
-  friendCheck:{width:"26px",height:"26px",borderRadius:"50%",border:"2px solid #444",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px"},
+  page:{ minHeight:"100vh", background:C.bg0, paddingBottom:"100px" },
+  header:{ display:"flex", alignItems:"center", gap:"12px", padding:"52px 16px 20px" },
+  back:{ background:C.bg2, border:`1px solid ${C.border1}`, borderRadius:"50%", width:"44px", height:"44px", color:C.white, fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 },
+  title:{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"28px", color:C.white, letterSpacing:"0.04em", flex:1 },
+  progressWrap:{ height:"3px", background:C.bg2, margin:"0 16px 28px", borderRadius:"2px" },
+  progressBar:{ height:"100%", background:`linear-gradient(90deg,${C.cyan},${C.purple})`, borderRadius:"2px", transition:"width 0.4s ease" },
+  content:{ padding:"0 16px" },
+  stepTitle:{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"32px", color:C.white, letterSpacing:"0.03em", marginBottom:"8px" },
+  stepSub:{ fontFamily:"'DM Sans',sans-serif", fontSize:"15px", color:C.muted, marginBottom:"24px", lineHeight:"1.5" },
+  textarea:{ width:"100%", background:C.bg2, border:`1px solid ${C.border1}`, borderRadius:"16px", padding:"16px", color:C.white, fontSize:"16px", fontFamily:"'DM Sans',sans-serif", outline:"none", resize:"none", lineHeight:"1.6" },
+  forfeitGrid:{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"24px" },
+  forfeitOpt:{ background:C.bg2, borderRadius:"16px", padding:"18px", textAlign:"center", cursor:"pointer", transition:"all 0.2s", minHeight:"110px", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" },
+  input:{ width:"100%", background:C.bg2, border:`1px solid ${C.border1}`, borderRadius:"14px", padding:"14px 16px", color:C.white, fontSize:"16px", fontFamily:"'DM Sans',sans-serif", outline:"none", minHeight:"52px" },
+  summary:{ background:C.bg2, borderRadius:"20px", padding:"20px", marginTop:"20px", border:`1px solid ${C.border1}` },
+  bottomBtn:{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:"480px", padding:"16px", background:`rgba(7,13,26,0.97)`, borderTop:`1px solid ${C.border1}`, paddingBottom:"calc(16px + env(safe-area-inset-bottom))", zIndex:100 },
+  btn:{ width:"100%", background:`linear-gradient(135deg,${C.cyan},${C.purple})`, border:"none", borderRadius:"16px", padding:"18px", fontFamily:"'Bebas Neue',sans-serif", fontSize:"24px", letterSpacing:"0.06em", color:"#000", cursor:"pointer", minHeight:"58px" },
 };

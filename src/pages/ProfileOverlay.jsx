@@ -21,8 +21,12 @@ export default function ProfileOverlay({ user, isOpen, onClose }) {
   const [activeSection, setActiveSection] = useState(null);
   const [screen, setScreen] = useState("main");
   const [theme, setTheme] = useState(getTheme());
-  const [notifications, setNotifications] = useState(true);
-  const [publicProfile, setPublicProfile] = useState(true);
+  const [notifPush, setNotifPush] = useState(true);
+  const [notifBets, setNotifBets] = useState(true);
+  const [notifApproved, setNotifApproved] = useState(true);
+  const [privPublic, setPrivPublic] = useState(true);
+  const [privVideos, setPrivVideos] = useState(true);
+  const [privLeader, setPrivLeader] = useState(true);
   const [autoApprove, setAutoApprove] = useState(false);
   const [videoQuality, setVideoQuality] = useState("high");
 
@@ -172,11 +176,16 @@ export default function ProfileOverlay({ user, isOpen, onClose }) {
   );
 
   const SettingRow = ({ icon, label, sub, right, onClick, danger }) => (
-    <div onClick={onClick} style={{
+  <div
+    onClick={onClick}
+    style={{
       display: "flex", alignItems: "center", gap: "14px",
       padding: "14px 20px", borderBottom: `1px solid ${border}`,
       cursor: onClick ? "pointer" : "default",
-    }}>
+      WebkitTapHighlightColor: "transparent", // ADD THIS
+      userSelect: "none", // ADD THIS
+    }}
+  >
       <div style={{
         width: "38px", height: "38px", borderRadius: "10px",
         background: danger ? "rgba(255,68,68,0.1)" : bg2,
@@ -477,20 +486,25 @@ export default function ProfileOverlay({ user, isOpen, onClose }) {
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: "11px", color: text2, letterSpacing: "0.1em", marginBottom: "8px" }}>NOTIFICATIONS</div>
             </div>
             <div style={{ margin: "0 20px 16px", background: bg2, borderRadius: "16px", overflow: "hidden" }}>
-              <SettingRow icon="🔔" label="Push notifications" sub="Get notified when challenged" right={<Toggle value={notifications} onChange={setNotifications} />} />
-              <SettingRow icon="⚔️" label="Bet challenges" sub="When someone challenges you" right={<Toggle value={notifications} onChange={setNotifications} />} />
-              <SettingRow icon="✅" label="Forfeit approved" sub="When opponent approves your video" right={<Toggle value={notifications} onChange={setNotifications} />} />
-            </div>
+              <SettingRow icon="🔔" label="Push notifications" sub="Get notified when challenged"
+  right={<Toggle value={notifPush} onChange={setNotifPush}/>}/>
+<SettingRow icon="⚔️" label="Bet challenges" sub="When someone challenges you"
+  right={<Toggle value={notifBets} onChange={setNotifBets}/>}/>
+<SettingRow icon="✅" label="Forfeit approved" sub="When opponent approves your video"
+  right={<Toggle value={notifApproved} onChange={setNotifApproved}/>}/>
+</div>
 
             {/* Privacy */}
             <div style={{ padding: "0 20px 8px" }}>
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: "11px", color: text2, letterSpacing: "0.1em", marginBottom: "8px" }}>PRIVACY</div>
             </div>
             <div style={{ margin: "0 20px 16px", background: bg2, borderRadius: "16px", overflow: "hidden" }}>
-              <SettingRow icon="👁" label="Public profile" sub="Anyone can see your stats" right={<Toggle value={publicProfile} onChange={setPublicProfile} />} />
-              <SettingRow icon="🎥" label="Public forfeit videos" sub="Videos visible in global feed" right={<Toggle value={publicProfile} onChange={setPublicProfile} />} />
-              <SettingRow icon="📊" label="Show on leaderboard" sub="Appear in public rankings" right={<Toggle value={publicProfile} onChange={setPublicProfile} />} />
-            </div>
+              <SettingRow icon="👁" label="Public profile" sub="Anyone can see your stats"
+  right={<Toggle value={privPublic} onChange={setPrivPublic}/>}/>
+<SettingRow icon="🎥" label="Public forfeit videos" sub="Videos visible in global feed"
+  right={<Toggle value={privVideos} onChange={setPrivVideos}/>}/>
+<SettingRow icon="📊" label="Show on leaderboard" sub="Appear in public rankings"
+  right={<Toggle value={privLeader} onChange={setPrivLeader}/>}/> </div>
 
             {/* Bet settings */}
             <div style={{ padding: "0 20px 8px" }}>
@@ -535,8 +549,17 @@ export default function ProfileOverlay({ user, isOpen, onClose }) {
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: "11px", color: text2, letterSpacing: "0.1em", marginBottom: "8px" }}>SUPPORT</div>
             </div>
             <div style={{ margin: "0 20px 16px", background: bg2, borderRadius: "16px", overflow: "hidden" }}>
-              <SettingRow icon="📖" label="How to play" sub="Rules and guides" right={<div style={{ fontSize: "20px", color: text2 }}>›</div>} onClick={() => {}} />
-              <SettingRow icon="🐛" label="Report a bug" sub="Help us improve" right={<div style={{ fontSize: "20px", color: text2 }}>›</div>} onClick={() => {}} />
+              <SettingRow icon="📖" label="How to play" sub="Rules and guides"
+  right={<div style={{fontSize:"20px",color:text2}}>›</div>}
+  onClick={() => {
+    onClose();
+    alert("SweatDebt Rules:\n\n1. Place a bet with a friend\n2. Loser does the forfeit workout\n3. Film yourself doing it\n4. Upload proof\n5. Opponent approves or disputes\n\nHonour score goes up when you complete forfeits on time! 🏆");
+  }}/>
+<SettingRow icon="🐛" label="Report a bug" sub="Help us improve"
+  right={<div style={{fontSize:"20px",color:text2}}>›</div>}
+  onClick={() => {
+    window.open("mailto:support@sweatdebt.app?subject=Bug Report&body=Describe the bug here...", "_blank");
+  }}/>
               <SettingRow icon="📢" label="Share SweatDebt" sub="Invite your friends" right={<div style={{ fontSize: "20px", color: text2 }}>›</div>}
                 onClick={() => navigator.share?.({ title: "SweatDebt", url: "https://sweatdebt.vercel.app" }) || window.open("https://sweatdebt.vercel.app")} />
             </div>

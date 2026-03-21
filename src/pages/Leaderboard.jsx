@@ -1,138 +1,206 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../firebase";
 import { collection, onSnapshot } from "firebase/firestore";
-import { LeaderboardSkeleton } from "../components/Skeleton";
-import PageTransition from "../components/PageTransition";
+
+const C = {
+  bg0:"#070d1a", bg1:"#0d1629", bg2:"#111f38", bg3:"#172847",
+  white:"#e0f2fe", muted:"#64748b", dim:"#3d5a7a",
+  cyan:"#00d4ff", coral:"#ff6b4a", green:"#00e676",
+  border1:"#1e3a5f", border2:"#2a4f7a", purple:"#a855f7",
+};
 
 export default function Leaderboard({ user }) {
-  const [bets, setBets] = useState([]);
-  const [activeTab, setActiveTab] = useState("friends");
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState("winRate");
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "bets"), snap => {
-      setBets(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-    });
-    return () => unsub();
+    const unsub = onSnapshot(collection(db,"users"), snap=>{
+      const data = snap.docs.map(d=>({id:d.id,...d.data()}));
+      setUsers(data);
+      setLoading(false);
+    }, err=>{ console.error(err); setLoading(false); });
+    return ()=>unsub();
   }, []);
 
-  // Build leaderboard from bets
-  const userMap = {};
-  bets.forEach(bet => {
-    if (!userMap[bet.createdBy]) {
-      userMap[bet.createdBy] = { name: bet.createdByName, won: 0, lost: 0, total: 0 };
+  const filters = [
+    { key:"winRate", label:"Win Rate" },
+    { key:"wins", label:"Most Wins" },
+    { key:"honour", label:"Honour" },
+    { key:"bets", label:"Most Active" },
+  ];
+
+  const sorted = [...users].sort((a,b)=>{
+    const aTotal = (a.wins||0)+(a.losses||0);
+    const bTotal = (b.wins||0)+(b.losses||0);
+    if (activeFilter==="winRate") {
+      const aRate = aTotal>0?(a.wins||0)/aTotal:0;
+      const bRate = bTotal>0?(b.wins||0)/bTotal:0;
+      return bRate-aRate;
     }
-    userMap[bet.createdBy].total++;
-    if (bet.status === "won") userMap[bet.createdBy].won++;
-    if (bet.status === "lost") userMap[bet.createdBy].lost++;
+    if (activeFilter==="wins") return (b.wins||0)-(a.wins||0);
+    if (activeFilter==="honour") return (b.honour||100)-(a.honour||100);
+    if (activeFilter==="bets") return bTotal-aTotal;
+    return 0;
   });
 
-  const rankings = Object.entries(userMap)
-    .map(([uid, data]) => ({
-      uid,
-      name: data.name,
-      won: data.won,
-      lost: data.lost,
-      total: data.total,
-      winRate: data.total > 0 ? Math.round((data.won / data.total) * 100) : 0,
-      honour: Math.max(0, 100 - data.lost * 5),
-    }))
-    .sort((a, b) => b.winRate - a.winRate);
+  const getScore = (u) => {
+    const total = (u.wins||0)+(u.losses||0);
+    if (activeFilter==="winRate") return total>0?`${Math.round((u.wins||0)/total*100)}%`:"0%";
+    if (activeFilter==="wins") return `${u.wins||0} W`;
+    if (activeFilter==="honour") return `${u.honour||100}`;
+    if (activeFilter==="bets") return `${total}`;
+    return "0";
+  };
 
-  const tabs = ["friends","global","pushups","running"];
-  const medals = ["🥇","🥈","🥉"];
+  const podiumHeights = [56, 80, 44];
+  const podiumColors = [
+    `linear-gradient(135deg,${C.cyan},${C.purple})`,
+    `linear-gradient(135deg,#ffd700,#ffa500)`,
+    `linear-gradient(135deg,#cd7f32,#8b4513)`,
+  ];
+  const podiumOrder = [1,0,2]; // silver, gold, bronze
+
+  if (loading) return (
+    <div style={{minHeight:"100vh",background:C.bg0,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:"16px"}}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{width:"36px",height:"36px",borderRadius:"50%",border:`3px solid ${C.border1}`,borderTop:`3px solid ${C.cyan}`,animation:"spin 0.8s linear infinite"}}/>
+    </div>
+  );
 
   return (
-    <PageTransition>
     <div style={S.page}>
       <div style={S.header}>
-        <div style={S.title}>Leader<span style={{color:"#d4ff00"}}>board</span></div>
+        <div style={S.title}>Leader<span style={{color:C.cyan}}>board</span></div>
       </div>
 
-      <div style={S.tabs}>
-        {tabs.map(tab => (
-          <div key={tab} style={{...S.tab, background:activeTab===tab?"#d4ff00":"#1a1a1a", color:activeTab===tab?"#000":"#666", border:activeTab===tab?"1px solid #d4ff00":"1px solid #333"}} onClick={()=>setActiveTab(tab)}>
-            {tab.charAt(0).toUpperCase()+tab.slice(1)}
+      {/* Filter tabs */}
+      <div style={S.filterRow}>
+        {filters.map(f=>(
+          <div key={f.key} style={{
+            ...S.filterBtn,
+            background:activeFilter===f.key?`linear-gradient(135deg,${C.cyan},${C.purple})`:"transparent",
+            color:activeFilter===f.key?"#000":C.muted,
+            border:activeFilter===f.key?"none":`1px solid ${C.border1}`,
+          }} onClick={()=>setActiveFilter(f.key)}>
+            {f.label}
           </div>
         ))}
       </div>
 
-      {rankings.length === 0 ? (
+      {sorted.length===0 ? (
         <div style={S.empty}>
-          <div style={S.emptyIcon}>🏆</div>
-          <div style={S.emptyText}>No rankings yet</div>
-          <div style={S.emptySub}>Place and complete bets to appear here</div>
+          <div style={{fontSize:"56px",marginBottom:"16px"}}>🏆</div>
+          <div style={S.emptyTitle}>No players yet</div>
+          <div style={S.emptySub}>Be the first on the board</div>
         </div>
       ) : (
         <>
-          {/* Top 3 podium */}
-          {rankings.length >= 2 && (
-            <div style={S.podium}>
-              {[1,0,2].map(i => rankings[i] && (
-                <div key={i} style={{...S.podiumItem, order:i===0?2:i===1?1:3}}>
-                  <div style={S.podiumMedal}>{medals[i]||""}</div>
-                  <div style={{...S.podiumAvatar, width:i===0?"64px":"52px", height:i===0?"64px":"52px", border:i===0?"3px solid #d4ff00":"2px solid #333"}}>
-                    {rankings[i]?.name?.charAt(0)||"?"}
+          {/* Podium */}
+          {sorted.length>=3&&(
+            <div style={S.podiumWrap}>
+              {podiumOrder.map((pos,i)=>{
+                const u = sorted[pos];
+                if (!u) return null;
+                const isYou = u.id===user?.uid;
+                return(
+                  <div key={pos} style={{...S.podiumItem,justifyContent:"flex-end"}}>
+                    <div style={{fontSize:"22px",marginBottom:"4px"}}>
+                      {pos===0?"🥇":pos===1?"🥈":"🥉"}
+                    </div>
+                    {u.photoURL?(
+                      <img src={u.photoURL} alt="" style={{
+                        width:pos===0?"60px":"48px",height:pos===0?"60px":"48px",
+                        borderRadius:"50%",objectFit:"cover",
+                        border:`3px solid ${pos===0?C.cyan:pos===1?"#ffd700":"#cd7f32"}`,
+                        marginBottom:"6px",
+                      }}/>
+                    ):(
+                      <div style={{
+                        width:pos===0?"60px":"48px",height:pos===0?"60px":"48px",
+                        borderRadius:"50%",
+                        background:podiumColors[pos],
+                        display:"flex",alignItems:"center",justifyContent:"center",
+                        fontFamily:"'Bebas Neue',sans-serif",fontSize:pos===0?"24px":"18px",
+                        color:"#000",marginBottom:"6px",
+                        border:`3px solid ${pos===0?C.cyan:pos===1?"#ffd700":"#cd7f32"}`,
+                      }}>{u.displayName?.charAt(0)||"?"}</div>
+                    )}
+                    <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"12px",fontWeight:"600",color:isYou?C.cyan:C.white,marginBottom:"2px",textAlign:"center",maxWidth:"80px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                      {isYou?"You":u.displayName?.split(" ")[0]}
+                    </div>
+                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:C.cyan,marginBottom:"6px"}}>{getScore(u)}</div>
+                    <div style={{
+                      width:"100%",height:`${podiumHeights[pos]}px`,
+                      background:podiumColors[pos],
+                      borderRadius:"6px 6px 0 0",opacity:0.8,
+                    }}/>
                   </div>
-                  <div style={S.podiumName}>{rankings[i]?.name?.split(" ")[0]}</div>
-                  <div style={S.podiumScore}>{rankings[i]?.winRate}%</div>
-                  <div style={{...S.podiumBase, height:i===0?"56px":i===1?"40px":"28px", background:i===0?"rgba(212,255,0,0.15)":"rgba(255,255,255,0.03)"}}/>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
-          {/* Full list */}
-          <div style={S.list}>
-            {rankings.map((r, i) => (
-              <div key={r.uid} style={{...S.row, background:r.uid===user.uid?"rgba(212,255,0,0.05)":"transparent", border:r.uid===user.uid?"1px solid rgba(212,255,0,0.2)":"1px solid transparent"}}>
-                <div style={{...S.rank, color:i===0?"#d4ff00":i===1?"#aaa":i===2?"#ff5c1a":"#555"}}>{i+1}</div>
-                <div style={S.rowAvatar}>{r.name?.charAt(0)||"?"}</div>
-                <div style={S.rowInfo}>
-                  <div style={S.rowName}>
-                    {r.name}
-                    {r.uid === user.uid && <span style={S.youTag}> YOU</span>}
+          {/* List */}
+          <div style={{padding:"0 16px"}}>
+            <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:C.muted,letterSpacing:"0.1em",marginBottom:"12px",textTransform:"uppercase"}}>
+              All Players
+            </div>
+            {sorted.map((u,i)=>{
+              const isYou = u.id===user?.uid;
+              const total = (u.wins||0)+(u.losses||0);
+              return(
+                <div key={u.id} style={{
+                  display:"flex",alignItems:"center",gap:"14px",
+                  padding:"14px",
+                  background:isYou?C.cyanDim:C.bg2,
+                  borderRadius:"16px",marginBottom:"8px",
+                  border:isYou?`1px solid ${C.cyanBorder}`:`1px solid ${C.border1}`,
+                }}>
+                  <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"22px",color:i<3?C.cyan:C.muted,width:"28px",textAlign:"center"}}>
+                    {i===0?"🥇":i===1?"🥈":i===2?"🥉":i+1}
                   </div>
-                  <div style={S.rowDetail}>{r.won}W · {r.lost}L · Honour {r.honour}</div>
+                  {u.photoURL?(
+                    <img src={u.photoURL} alt="" style={{width:"46px",height:"46px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${isYou?C.cyan:C.border2}`,flexShrink:0}}/>
+                  ):(
+                    <div style={{
+                      width:"46px",height:"46px",borderRadius:"50%",
+                      background:`linear-gradient(135deg,${C.cyan},${C.purple})`,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontFamily:"'Bebas Neue',sans-serif",fontSize:"18px",color:"#000",flexShrink:0,
+                    }}>{u.displayName?.charAt(0)||"?"}</div>
+                  )}
+                  <div style={{flex:1}}>
+                    <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"16px",fontWeight:"500",color:isYou?C.cyan:C.white}}>
+                      {isYou?"You ("+u.displayName+")":u.displayName}
+                    </div>
+                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:C.muted,marginTop:"2px"}}>
+                      {u.wins||0}W · {u.losses||0}L · ⭐{u.honour||100}
+                    </div>
+                  </div>
+                  <div style={{textAlign:"right"}}>
+                    <div style={{fontFamily:"'Bebas Neue',sans-serif",fontSize:"22px",color:C.cyan}}>{getScore(u)}</div>
+                    <div style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:C.muted}}>{activeFilter==="winRate"?"WIN RATE":activeFilter==="wins"?"WINS":activeFilter==="honour"?"HONOUR":"BETS"}</div>
+                  </div>
                 </div>
-                <div style={S.rowRight}>
-                  <div style={S.rowPct}>{r.winRate}%</div>
-                  <div style={S.rowLabel}>win rate</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
-    </div></PageTransition>
+    </div>
   );
 }
 
 const S = {
-  page:{minHeight:"100vh",background:"#111",paddingBottom:"90px"},
-  header:{padding:"52px 16px 16px"},
-  title:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"36px",color:"#f5f0e8",letterSpacing:"0.03em"},
-  tabs:{display:"flex",gap:"8px",padding:"0 16px",marginBottom:"20px",flexWrap:"wrap"},
-  tab:{padding:"8px 16px",borderRadius:"20px",fontFamily:"'DM Mono',monospace",fontSize:"12px",fontWeight:"500",cursor:"pointer",transition:"all 0.2s",minHeight:"40px",display:"flex",alignItems:"center",letterSpacing:"0.05em"},
-  empty:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"60vh",gap:"14px"},
-  emptyIcon:{fontSize:"52px"},
-  emptyText:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"28px",color:"#555",letterSpacing:"0.04em"},
-  emptySub:{fontFamily:"'DM Sans',sans-serif",color:"#333",fontSize:"14px"},
-  podium:{display:"flex",alignItems:"flex-end",justifyContent:"center",gap:"12px",padding:"20px 16px 28px"},
-  podiumItem:{display:"flex",flexDirection:"column",alignItems:"center",gap:"6px",flex:1,maxWidth:"110px"},
-  podiumMedal:{fontSize:"24px"},
-  podiumAvatar:{borderRadius:"50%",background:"#2a2a2a",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:"20px",color:"#f5f0e8"},
-  podiumName:{fontFamily:"'DM Sans',sans-serif",fontSize:"13px",fontWeight:"500",color:"#f5f0e8"},
-  podiumScore:{fontFamily:"'DM Mono',monospace",fontSize:"12px",color:"#d4ff00"},
-  podiumBase:{width:"100%",borderRadius:"4px 4px 0 0"},
-  list:{padding:"0 16px"},
-  row:{display:"flex",alignItems:"center",gap:"14px",padding:"14px",borderRadius:"16px",marginBottom:"8px",cursor:"pointer",minHeight:"68px"},
-  rank:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"24px",width:"28px",textAlign:"center"},
-  rowAvatar:{width:"46px",height:"46px",borderRadius:"50%",background:"linear-gradient(135deg,#d4ff00,#ff5c1a)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:"18px",color:"#000",flexShrink:0},
-  rowInfo:{flex:1},
-  rowName:{fontFamily:"'DM Sans',sans-serif",fontSize:"16px",fontWeight:"500",color:"#f5f0e8"},
-  youTag:{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#d4ff00",letterSpacing:"0.06em"},
-  rowDetail:{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"#555",marginTop:"3px"},
-  rowRight:{textAlign:"right"},
-  rowPct:{fontFamily:"'Bebas Neue',sans-serif",fontSize:"22px",color:"#d4ff00"},
-  rowLabel:{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:"#555"},
+  page:{ minHeight:"100vh", background:C.bg0, paddingBottom:"90px" },
+  header:{ padding:"52px 16px 16px" },
+  title:{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"36px", color:C.white, letterSpacing:"0.03em" },
+  filterRow:{ display:"flex", gap:"8px", padding:"0 16px", marginBottom:"20px", flexWrap:"wrap" },
+  filterBtn:{ padding:"8px 16px", borderRadius:"20px", fontFamily:"'DM Mono',monospace", fontSize:"12px", fontWeight:"500", cursor:"pointer", transition:"all 0.2s", minHeight:"40px", display:"flex", alignItems:"center", letterSpacing:"0.04em" },
+  podiumWrap:{ display:"flex", alignItems:"flex-end", justifyContent:"center", gap:"12px", padding:"20px 16px 28px" },
+  podiumItem:{ display:"flex", flexDirection:"column", alignItems:"center", flex:1, maxWidth:"110px" },
+  empty:{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"60vh" },
+  emptyTitle:{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"28px", color:C.muted, letterSpacing:"0.04em", marginBottom:"8px" },
+  emptySub:{ fontFamily:"'DM Sans',sans-serif", color:C.dim, fontSize:"14px" },
 };
