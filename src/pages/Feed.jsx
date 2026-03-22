@@ -15,7 +15,7 @@ const C = {
   purple:"#a855f7",
 };
 
-export default function Feed({ user, onBellClick }) {
+export default function Feed({ user, onBellClick, onCommentsToggle }) {
   const navigate = useNavigate();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -88,12 +88,19 @@ export default function Feed({ user, onBellClick }) {
         </div>
       )}
 
-      {displayVideos.length>0 && <ReelsFeed videos={displayVideos} user={user} navigate={navigate}/>}
+      {displayVideos.length>0 && (
+        <ReelsFeed
+          videos={displayVideos}
+          user={user}
+          navigate={navigate}
+          onCommentsToggle={onCommentsToggle}
+        />
+      )}
     </div>
   );
 }
 
-function ReelsFeed({videos,user,navigate}){
+function ReelsFeed({videos, user, navigate, onCommentsToggle}){
   const [currentIndex,setCurrentIndex]=useState(0);
   const startY=useRef(null);
   const startTime=useRef(null);
@@ -108,7 +115,6 @@ function ReelsFeed({videos,user,navigate}){
     if(clamped===currentIndex)return;
     isAnimating.current=true;
     setCurrentIndex(clamped);
-    // Unlock after animation completes
     setTimeout(()=>{ isAnimating.current=false; },500);
   };
 
@@ -116,19 +122,16 @@ function ReelsFeed({videos,user,navigate}){
     startY.current=e.touches[0].clientY;
     startTime.current=Date.now();
   };
-
   const handleTouchEnd=(e)=>{
     if(startY.current===null)return;
     const diff=startY.current-e.changedTouches[0].clientY;
     const elapsed=Date.now()-startTime.current;
-    // Need meaningful swipe: 50px OR fast flick
     const isMeaningful=Math.abs(diff)>50||(Math.abs(diff)>20&&elapsed<200);
     if(isMeaningful){
       if(diff>0) goTo(currentIndex+1);
       else goTo(currentIndex-1);
     }
-    startY.current=null;
-    startTime.current=null;
+    startY.current=null; startTime.current=null;
   };
 
   const handleWheel=useCallback((e)=>{
@@ -147,15 +150,12 @@ function ReelsFeed({videos,user,navigate}){
   return(
     <div ref={containerRef} style={{height:"100vh",overflow:"hidden",position:"relative"}}
       onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-      {/* Only render nearby cards for performance */}
       {videos.map((video,index)=>{
-        const distance=Math.abs(index-currentIndex);
-        if(distance>2)return null; // Don't render far away cards
+        if(Math.abs(index-currentIndex)>2)return null;
         return(
           <ReelCard key={video.id} video={video} user={user}
-            isActive={index===currentIndex}
-            offset={index-currentIndex}
-            navigate={navigate}/>
+            isActive={index===currentIndex} offset={index-currentIndex}
+            navigate={navigate} onCommentsToggle={onCommentsToggle}/>
         );
       })}
       {/* Side dots */}
@@ -169,7 +169,7 @@ function ReelsFeed({videos,user,navigate}){
   );
 }
 
-function ReelCard({video,user,isActive,offset,navigate}){
+function ReelCard({video,user,isActive,offset,navigate,onCommentsToggle}){
   const videoRef=useRef(null);
   const [liked,setLiked]=useState(false);
   const [likes,setLikes]=useState(video.likes||0);
@@ -180,15 +180,13 @@ function ReelCard({video,user,isActive,offset,navigate}){
   const [commentCount,setCommentCount]=useState(video.comments||0);
   const [muted,setMuted]=useState(false);
 
+  const openComments=()=>{ setShowComments(true); onCommentsToggle?.(true); };
+  const closeComments=()=>{ setShowComments(false); onCommentsToggle?.(false); };
+
   useEffect(()=>{
     const v=videoRef.current; if(!v)return;
-    if(isActive){
-      v.play().catch(()=>{});
-    } else {
-      v.pause();
-      // Don't reset currentTime so going back resumes
-      setShowComments(false);
-    }
+    if(isActive){ v.play().catch(()=>{}); }
+    else { v.pause(); closeComments(); }
   },[isActive]);
 
   const canVerdict=!approved&&!disputed&&(
@@ -236,7 +234,6 @@ function ReelCard({video,user,isActive,offset,navigate}){
       transform:`translateY(${offset*100}%)`,
       transition:offset===0?"none":"transform 0.42s cubic-bezier(0.25,0.46,0.45,0.94)",
       background:C.bg0,overflow:"hidden",
-      // Only active card is interactive
       pointerEvents:isActive?"all":"none",
     }}>
       <video ref={videoRef} src={video.videoUrl}
@@ -245,7 +242,7 @@ function ReelCard({video,user,isActive,offset,navigate}){
         onClick={()=>setMuted(!muted)}/>
       <div style={{position:"absolute",inset:0,pointerEvents:"none",background:"linear-gradient(to top,rgba(7,13,26,0.97) 0%,rgba(7,13,26,0.2) 30%,transparent 55%,rgba(7,13,26,0.5) 100%)"}}/>
 
-      {/* Status */}
+      {/* Status tag */}
       <div style={{position:"absolute",top:"60px",left:"16px"}}>
         {approved&&<div style={{background:"rgba(0,230,118,0.2)",border:"1px solid rgba(0,230,118,0.6)",color:C.green,padding:"4px 12px",borderRadius:"20px",fontFamily:"'DM Mono',monospace",fontSize:"11px",fontWeight:"700"}}>APPROVED ✓</div>}
         {disputed&&<div style={{background:"rgba(255,77,109,0.2)",border:"1px solid rgba(255,77,109,0.6)",color:C.red,padding:"4px 12px",borderRadius:"20px",fontFamily:"'DM Mono',monospace",fontSize:"11px",fontWeight:"700"}}>DISPUTED ✗</div>}
@@ -257,7 +254,7 @@ function ReelCard({video,user,isActive,offset,navigate}){
       <div style={{position:"absolute",right:"12px",bottom:"100px",display:"flex",flexDirection:"column",gap:"20px",alignItems:"center",zIndex:10}}>
         {[
           {icon:liked?"❤️":"🤍",count:likes,onClick:handleLike},
-          {icon:"💬",count:commentCount,onClick:()=>setShowComments(true)},
+          {icon:"💬",count:commentCount,onClick:openComments},
           {icon:"↗️",label:"Share",onClick:async()=>{if(navigator.share)await navigator.share({title:"SweatDebt forfeit",url:window.location.href});else navigator.clipboard.writeText(window.location.href);}},
           {icon:"⚔️",label:"Bet",onClick:()=>navigate("/create")},
         ].map((btn,i)=>(
@@ -298,7 +295,16 @@ function ReelCard({video,user,isActive,offset,navigate}){
         {disputed&&<div style={{background:"rgba(255,77,109,0.15)",border:"1px solid rgba(255,77,109,0.4)",borderRadius:"10px",padding:"10px 14px",fontFamily:"'DM Sans',sans-serif",fontSize:"13px",color:C.red,textAlign:"center",marginBottom:"10px"}}>⚠ Disputed — honour dropped</div>}
       </div>
 
-      {showComments&&<CommentsPanel videoId={video.id} currentUser={user} onCountChange={setCommentCount} onClose={()=>setShowComments(false)} navigate={navigate}/>}
+      {/* Comments panel — full screen, nav already hidden by App.js */}
+      {showComments&&(
+        <CommentsPanel
+          videoId={video.id}
+          currentUser={user}
+          onCountChange={setCommentCount}
+          onClose={closeComments}
+          navigate={navigate}
+        />
+      )}
     </div>
     </>
   );
@@ -314,23 +320,19 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
   const inputRef=useRef(null);
   const listRef=useRef(null);
 
-  // Detect keyboard open/close and adjust panel
+  // Detect keyboard and shift panel up
   useEffect(()=>{
+    if(!window.visualViewport)return;
     const handleResize=()=>{
-      if(window.visualViewport){
-        const kbHeight=window.innerHeight-window.visualViewport.height;
-        setKeyboardHeight(Math.max(0,kbHeight));
-        // Scroll comments to bottom when keyboard opens
-        if(kbHeight>100){
-          setTimeout(()=>listRef.current?.scrollTo({top:99999,behavior:"smooth"}),100);
-        }
-      }
+      const kh=window.innerHeight-window.visualViewport.height;
+      setKeyboardHeight(Math.max(0,kh));
+      if(kh>100) setTimeout(()=>listRef.current?.scrollTo({top:99999,behavior:"smooth"}),100);
     };
-    window.visualViewport?.addEventListener("resize",handleResize);
-    window.visualViewport?.addEventListener("scroll",handleResize);
+    window.visualViewport.addEventListener("resize",handleResize);
+    window.visualViewport.addEventListener("scroll",handleResize);
     return()=>{
-      window.visualViewport?.removeEventListener("resize",handleResize);
-      window.visualViewport?.removeEventListener("scroll",handleResize);
+      window.visualViewport.removeEventListener("resize",handleResize);
+      window.visualViewport.removeEventListener("scroll",handleResize);
     };
   },[]);
 
@@ -352,13 +354,13 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
     try{
       await addDoc(collection(db,"videos",videoId,"comments"),{
         text:replyingTo?`@${replyingTo.userName} ${t}`:t,
-        userId:currentUser.uid, userName:currentUser.displayName,
-        userPhoto:currentUser.photoURL||null, createdAt:serverTimestamp(), likes:0,
-        replyTo:replyingTo?.id||null, replyToName:replyingTo?.userName||null,
+        userId:currentUser.uid,userName:currentUser.displayName,
+        userPhoto:currentUser.photoURL||null,createdAt:serverTimestamp(),likes:0,
+        replyTo:replyingTo?.id||null,replyToName:replyingTo?.userName||null,
       });
       await updateDoc(doc(db,"videos",videoId),{comments:increment(1)});
       setTimeout(()=>listRef.current?.scrollTo({top:99999,behavior:"smooth"}),200);
-    }catch(e){console.error(e); setText(t);}
+    }catch(e){console.error(e);setText(t);}
     setPosting(false);
   };
 
@@ -371,31 +373,30 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
 
   const quickReactions=["😂","🔥","💀","😤","👑","🫡","💪","😭"];
 
-  // Panel moves UP by keyboard height so input stays visible
-  const panelBottom = keyboardHeight > 0 ? keyboardHeight : 0;
-
   return(
     <>
     <style>{`
       @keyframes slideUpPanel{from{transform:translateY(100%) translateX(-50%)}to{transform:translateY(0) translateX(-50%)}}
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
+    {/* Backdrop covers full screen */}
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:2000}} onClick={onClose}/>
 
-    {/* Backdrop */}
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:2000}} onClick={onClose}/>
-
-    {/* Panel — shifts up when keyboard opens */}
+    {/* Panel — shifts up when keyboard opens, fills full height above keyboard */}
     <div style={{
       position:"fixed",
-      bottom:`${panelBottom}px`,
+      bottom:`${keyboardHeight}px`,
       left:"50%",
       width:"100%",maxWidth:"480px",
-      height:"72vh",
-      background:C.bg1, borderRadius:"20px 20px 0 0",
+      // Full viewport height minus keyboard — so it truly fills screen
+      height:`calc(100vh - ${keyboardHeight}px)`,
+      maxHeight:"100vh",
+      background:C.bg1,
+      borderRadius:keyboardHeight>0?"0":"20px 20px 0 0",
       zIndex:2001,
       animation:"slideUpPanel 0.35s cubic-bezier(0.32,0.72,0,1)",
       display:"flex",flexDirection:"column",
-      transition:"bottom 0.25s ease",
+      transition:"bottom 0.2s ease, height 0.2s ease, border-radius 0.2s ease",
     }}>
       {/* Handle */}
       <div style={{width:"36px",height:"4px",background:C.bg3,borderRadius:"2px",margin:"12px auto 0",flexShrink:0}}/>
@@ -412,11 +413,11 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
       <div style={{display:"flex",gap:"8px",padding:"0 16px 10px",overflowX:"auto",flexShrink:0}}>
         {quickReactions.map(emoji=>(
           <button key={emoji} style={{background:C.bg2,border:`1px solid ${C.border1}`,borderRadius:"20px",padding:"6px 12px",fontSize:"18px",cursor:"pointer",flexShrink:0}}
-            onClick={()=>{setText(p=>p+emoji); inputRef.current?.focus();}}>{emoji}</button>
+            onClick={()=>{setText(p=>p+emoji);inputRef.current?.focus();}}>{emoji}</button>
         ))}
       </div>
 
-      {/* List */}
+      {/* Comments list */}
       <div ref={listRef} style={{flex:1,overflowY:"auto",padding:"0 16px 4px"}}>
         {loading?(
           <div style={{display:"flex",justifyContent:"center",padding:"32px"}}>
@@ -434,9 +435,9 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
               onReply={()=>{
                 setReplyingTo({id:c.id,userName:c.userName});
                 setText(`@${c.userName} `);
-                setTimeout(()=>{ inputRef.current?.focus(); listRef.current?.scrollTo({top:99999,behavior:"smooth"}); },100);
+                setTimeout(()=>{inputRef.current?.focus();listRef.current?.scrollTo({top:99999,behavior:"smooth"});},100);
               }}
-              onProfileClick={()=>{ onClose(); navigate(`/profile/${c.userId}`); }}
+              onProfileClick={()=>{onClose();navigate(`/profile/${c.userId}`);}}
             />
           ))
         )}
@@ -447,11 +448,11 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 16px",background:C.bg2,borderTop:`1px solid ${C.border1}`,flexShrink:0}}>
           <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"13px",color:C.cyan}}>↩ Replying to @{replyingTo.userName}</div>
           <div style={{color:C.muted,cursor:"pointer",width:"44px",height:"44px",display:"flex",alignItems:"center",justifyContent:"flex-end"}}
-            onClick={()=>{setReplyingTo(null); setText("");}}>✕</div>
+            onClick={()=>{setReplyingTo(null);setText("");}}>✕</div>
         </div>
       )}
 
-      {/* INPUT — always visible */}
+      {/* INPUT — always at bottom, always visible */}
       <div style={{flexShrink:0,background:C.bg1,borderTop:`1px solid ${C.border1}`,padding:"12px 16px 16px"}}>
         <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
           {currentUser?.photoURL?(
@@ -473,7 +474,7 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
               maxLength={200}
             />
             {text.trim().length>0&&(
-              <button style={{background:`linear-gradient(135deg,${C.cyan},${C.purple})`,border:"none",borderRadius:"50%",width:"30px",height:"30px",fontSize:"14px",color:"#000",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:posting?0.5:1,flexShrink:0,transition:"opacity 0.2s"}}
+              <button style={{background:`linear-gradient(135deg,${C.cyan},${C.purple})`,border:"none",borderRadius:"50%",width:"30px",height:"30px",fontSize:"14px",color:"#000",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:posting?0.5:1,flexShrink:0}}
                 onClick={postComment} disabled={posting}>{posting?"…":"↑"}</button>
             )}
           </div>
@@ -488,7 +489,6 @@ function CommentRow({comment,videoId,currentUser,timeAgo,onReply,onProfileClick}
   const [liked,setLiked]=useState(false);
   const [likes,setLikes]=useState(comment.likes||0);
   const isOwn=comment.userId===currentUser?.uid;
-
   return(
     <div style={{display:"flex",gap:"10px",padding:"12px 0",borderBottom:`1px solid ${C.bg3}`}}>
       <div style={{cursor:"pointer",flexShrink:0}} onClick={onProfileClick}>
