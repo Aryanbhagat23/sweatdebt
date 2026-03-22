@@ -96,30 +96,46 @@ export default function Feed({ user, onBellClick }) {
 function ReelsFeed({videos,user,navigate}){
   const [currentIndex,setCurrentIndex]=useState(0);
   const startY=useRef(null);
+  const startTime=useRef(null);
   const containerRef=useRef(null);
-  const lastSwipe=useRef(0);
+  const isAnimating=useRef(false);
 
   useEffect(()=>setCurrentIndex(0),[videos]);
 
-  const handleTouchStart=(e)=>{ startY.current=e.touches[0].clientY; };
+  const goTo=(idx)=>{
+    if(isAnimating.current)return;
+    const clamped=Math.max(0,Math.min(videos.length-1,idx));
+    if(clamped===currentIndex)return;
+    isAnimating.current=true;
+    setCurrentIndex(clamped);
+    // Unlock after animation completes
+    setTimeout(()=>{ isAnimating.current=false; },500);
+  };
+
+  const handleTouchStart=(e)=>{
+    startY.current=e.touches[0].clientY;
+    startTime.current=Date.now();
+  };
+
   const handleTouchEnd=(e)=>{
     if(startY.current===null)return;
     const diff=startY.current-e.changedTouches[0].clientY;
-    const now=Date.now();
-    if(Math.abs(diff)>60&&now-lastSwipe.current>400){
-      lastSwipe.current=now;
-      if(diff>0&&currentIndex<videos.length-1) setCurrentIndex(p=>p+1);
-      else if(diff<0&&currentIndex>0) setCurrentIndex(p=>p-1);
+    const elapsed=Date.now()-startTime.current;
+    // Need meaningful swipe: 50px OR fast flick
+    const isMeaningful=Math.abs(diff)>50||(Math.abs(diff)>20&&elapsed<200);
+    if(isMeaningful){
+      if(diff>0) goTo(currentIndex+1);
+      else goTo(currentIndex-1);
     }
     startY.current=null;
+    startTime.current=null;
   };
 
   const handleWheel=useCallback((e)=>{
     e.preventDefault();
-    const now=Date.now();
-    if(now-lastSwipe.current<600)return;
-    if(e.deltaY>40&&currentIndex<videos.length-1){lastSwipe.current=now;setCurrentIndex(p=>p+1);}
-    else if(e.deltaY<-40&&currentIndex>0){lastSwipe.current=now;setCurrentIndex(p=>p-1);}
+    if(isAnimating.current)return;
+    if(e.deltaY>30) goTo(currentIndex+1);
+    else if(e.deltaY<-30) goTo(currentIndex-1);
   },[currentIndex,videos.length]);
 
   useEffect(()=>{
@@ -129,15 +145,24 @@ function ReelsFeed({videos,user,navigate}){
   },[handleWheel]);
 
   return(
-    <div ref={containerRef} style={{height:"100vh",overflow:"hidden",position:"relative"}} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-      {videos.map((video,index)=>(
-        <ReelCard key={video.id} video={video} user={user} isActive={index===currentIndex} offset={index-currentIndex} navigate={navigate}/>
-      ))}
+    <div ref={containerRef} style={{height:"100vh",overflow:"hidden",position:"relative"}}
+      onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      {/* Only render nearby cards for performance */}
+      {videos.map((video,index)=>{
+        const distance=Math.abs(index-currentIndex);
+        if(distance>2)return null; // Don't render far away cards
+        return(
+          <ReelCard key={video.id} video={video} user={user}
+            isActive={index===currentIndex}
+            offset={index-currentIndex}
+            navigate={navigate}/>
+        );
+      })}
       {/* Side dots */}
       <div style={{position:"fixed",right:"8px",top:"50%",transform:"translateY(-50%)",display:"flex",flexDirection:"column",gap:"5px",zIndex:50}}>
         {videos.slice(Math.max(0,currentIndex-4),currentIndex+5).map((_,i)=>{
           const actual=Math.max(0,currentIndex-4)+i;
-          return <div key={actual} style={{width:"3px",height:actual===currentIndex?"18px":"4px",borderRadius:"2px",background:actual===currentIndex?C.cyan:"rgba(224,242,254,0.2)",transition:"all 0.3s",cursor:"pointer"}} onClick={()=>setCurrentIndex(actual)}/>;
+          return <div key={actual} style={{width:"3px",height:actual===currentIndex?"18px":"4px",borderRadius:"2px",background:actual===currentIndex?C.cyan:"rgba(224,242,254,0.2)",transition:"all 0.3s",cursor:"pointer"}} onClick={()=>goTo(actual)}/>;
         })}
       </div>
     </div>
@@ -157,8 +182,13 @@ function ReelCard({video,user,isActive,offset,navigate}){
 
   useEffect(()=>{
     const v=videoRef.current; if(!v)return;
-    if(isActive){v.play().catch(()=>{});}
-    else{v.pause(); v.currentTime=0; setShowComments(false);}
+    if(isActive){
+      v.play().catch(()=>{});
+    } else {
+      v.pause();
+      // Don't reset currentTime so going back resumes
+      setShowComments(false);
+    }
   },[isActive]);
 
   const canVerdict=!approved&&!disputed&&(
@@ -201,11 +231,21 @@ function ReelCard({video,user,isActive,offset,navigate}){
   return(
     <>
     <style>{`@keyframes heartPop{0%{transform:scale(1)}50%{transform:scale(1.4)}100%{transform:scale(1)}}`}</style>
-    <div style={{position:"absolute",inset:0,transform:`translateY(${offset*100}%)`,transition:"transform 0.45s cubic-bezier(0.25,0.46,0.45,0.94)",background:C.bg0,overflow:"hidden"}}>
-      <video ref={videoRef} src={video.videoUrl} style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}} loop playsInline muted={muted} preload={isActive?"auto":"none"} onClick={()=>setMuted(!muted)}/>
+    <div style={{
+      position:"absolute",inset:0,
+      transform:`translateY(${offset*100}%)`,
+      transition:offset===0?"none":"transform 0.42s cubic-bezier(0.25,0.46,0.45,0.94)",
+      background:C.bg0,overflow:"hidden",
+      // Only active card is interactive
+      pointerEvents:isActive?"all":"none",
+    }}>
+      <video ref={videoRef} src={video.videoUrl}
+        style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}}
+        loop playsInline muted={muted} preload="metadata"
+        onClick={()=>setMuted(!muted)}/>
       <div style={{position:"absolute",inset:0,pointerEvents:"none",background:"linear-gradient(to top,rgba(7,13,26,0.97) 0%,rgba(7,13,26,0.2) 30%,transparent 55%,rgba(7,13,26,0.5) 100%)"}}/>
 
-      {/* Status tag */}
+      {/* Status */}
       <div style={{position:"absolute",top:"60px",left:"16px"}}>
         {approved&&<div style={{background:"rgba(0,230,118,0.2)",border:"1px solid rgba(0,230,118,0.6)",color:C.green,padding:"4px 12px",borderRadius:"20px",fontFamily:"'DM Mono',monospace",fontSize:"11px",fontWeight:"700"}}>APPROVED ✓</div>}
         {disputed&&<div style={{background:"rgba(255,77,109,0.2)",border:"1px solid rgba(255,77,109,0.6)",color:C.red,padding:"4px 12px",borderRadius:"20px",fontFamily:"'DM Mono',monospace",fontSize:"11px",fontWeight:"700"}}>DISPUTED ✗</div>}
@@ -231,7 +271,6 @@ function ReelCard({video,user,isActive,offset,navigate}){
 
       {/* Bottom info */}
       <div style={{position:"absolute",bottom:0,left:0,right:"60px",padding:"0 16px 90px",zIndex:10}}>
-        {/* Uploader row — tap to see profile */}
         <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px",cursor:"pointer"}} onClick={()=>navigate(`/profile/${video.uploadedBy}`)}>
           {video.uploaderPhoto?(
             <img src={video.uploaderPhoto} alt="" style={{width:"42px",height:"42px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${C.cyan}`,flexShrink:0}}/>
@@ -255,14 +294,11 @@ function ReelCard({video,user,isActive,offset,navigate}){
             </div>
           </div>
         )}
-        {approved&&<div style={{background:"rgba(0,230,118,0.15)",border:"1px solid rgba(0,230,118,0.4)",borderRadius:"10px",padding:"10px 14px",fontFamily:"'DM Sans',sans-serif",fontSize:"13px",color:C.green,textAlign:"center",marginBottom:"10px"}}>✓ Forfeit approved! Scores updated 🏆</div>}
+        {approved&&<div style={{background:"rgba(0,230,118,0.15)",border:"1px solid rgba(0,230,118,0.4)",borderRadius:"10px",padding:"10px 14px",fontFamily:"'DM Sans',sans-serif",fontSize:"13px",color:C.green,textAlign:"center",marginBottom:"10px"}}>✓ Approved! Scores updated 🏆</div>}
         {disputed&&<div style={{background:"rgba(255,77,109,0.15)",border:"1px solid rgba(255,77,109,0.4)",borderRadius:"10px",padding:"10px 14px",fontFamily:"'DM Sans',sans-serif",fontSize:"13px",color:C.red,textAlign:"center",marginBottom:"10px"}}>⚠ Disputed — honour dropped</div>}
       </div>
 
-      {/* Comments — fixed overlay above everything including nav */}
-      {showComments&&(
-        <CommentsPanel videoId={video.id} currentUser={user} onCountChange={setCommentCount} onClose={()=>setShowComments(false)} navigate={navigate}/>
-      )}
+      {showComments&&<CommentsPanel videoId={video.id} currentUser={user} onCountChange={setCommentCount} onClose={()=>setShowComments(false)} navigate={navigate}/>}
     </div>
     </>
   );
@@ -274,8 +310,29 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
   const [replyingTo,setReplyingTo]=useState(null);
   const [posting,setPosting]=useState(false);
   const [loading,setLoading]=useState(true);
+  const [keyboardHeight,setKeyboardHeight]=useState(0);
   const inputRef=useRef(null);
   const listRef=useRef(null);
+
+  // Detect keyboard open/close and adjust panel
+  useEffect(()=>{
+    const handleResize=()=>{
+      if(window.visualViewport){
+        const kbHeight=window.innerHeight-window.visualViewport.height;
+        setKeyboardHeight(Math.max(0,kbHeight));
+        // Scroll comments to bottom when keyboard opens
+        if(kbHeight>100){
+          setTimeout(()=>listRef.current?.scrollTo({top:99999,behavior:"smooth"}),100);
+        }
+      }
+    };
+    window.visualViewport?.addEventListener("resize",handleResize);
+    window.visualViewport?.addEventListener("scroll",handleResize);
+    return()=>{
+      window.visualViewport?.removeEventListener("resize",handleResize);
+      window.visualViewport?.removeEventListener("scroll",handleResize);
+    };
+  },[]);
 
   useEffect(()=>{
     const q=query(collection(db,"videos",videoId,"comments"));
@@ -283,13 +340,10 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
       const data=snap.docs.map(d=>({id:d.id,...d.data()}));
       data.sort((a,b)=>(a.createdAt?.toDate?.()||0)-(b.createdAt?.toDate?.()||0));
       setComments(data); onCountChange(data.length); setLoading(false);
+      setTimeout(()=>listRef.current?.scrollTo({top:99999,behavior:"smooth"}),100);
     });
     return()=>unsub();
   },[videoId]);
-
-  useEffect(()=>{
-    if(replyingTo) setTimeout(()=>inputRef.current?.focus(),100);
-  },[replyingTo]);
 
   const postComment=async()=>{
     if(!text.trim()||posting)return;
@@ -317,27 +371,31 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
 
   const quickReactions=["😂","🔥","💀","😤","👑","🫡","💪","😭"];
 
+  // Panel moves UP by keyboard height so input stays visible
+  const panelBottom = keyboardHeight > 0 ? keyboardHeight : 0;
+
   return(
     <>
     <style>{`
-      @keyframes slideUpPanel{from{transform:translateY(100%)}to{transform:translateY(0)}}
+      @keyframes slideUpPanel{from{transform:translateY(100%) translateX(-50%)}to{transform:translateY(0) translateX(-50%)}}
       @keyframes spin{to{transform:rotate(360deg)}}
     `}</style>
 
-    {/* Backdrop — fixed, covers entire screen including nav */}
+    {/* Backdrop */}
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:2000}} onClick={onClose}/>
 
-    {/* Panel — fixed, always above nav */}
+    {/* Panel — shifts up when keyboard opens */}
     <div style={{
-      position:"fixed", bottom:0,
-      left:"50%", transform:"translateX(-50%)",
-      width:"100%", maxWidth:"480px",
-      // Height leaves room for safe area but NOT for nav (we're above nav)
-      height:"75vh",
+      position:"fixed",
+      bottom:`${panelBottom}px`,
+      left:"50%",
+      width:"100%",maxWidth:"480px",
+      height:"72vh",
       background:C.bg1, borderRadius:"20px 20px 0 0",
       zIndex:2001,
       animation:"slideUpPanel 0.35s cubic-bezier(0.32,0.72,0,1)",
-      display:"flex", flexDirection:"column",
+      display:"flex",flexDirection:"column",
+      transition:"bottom 0.25s ease",
     }}>
       {/* Handle */}
       <div style={{width:"36px",height:"4px",background:C.bg3,borderRadius:"2px",margin:"12px auto 0",flexShrink:0}}/>
@@ -358,7 +416,7 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
         ))}
       </div>
 
-      {/* Comments list */}
+      {/* List */}
       <div ref={listRef} style={{flex:1,overflowY:"auto",padding:"0 16px 4px"}}>
         {loading?(
           <div style={{display:"flex",justifyContent:"center",padding:"32px"}}>
@@ -376,7 +434,7 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
               onReply={()=>{
                 setReplyingTo({id:c.id,userName:c.userName});
                 setText(`@${c.userName} `);
-                setTimeout(()=>inputRef.current?.focus(),100);
+                setTimeout(()=>{ inputRef.current?.focus(); listRef.current?.scrollTo({top:99999,behavior:"smooth"}); },100);
               }}
               onProfileClick={()=>{ onClose(); navigate(`/profile/${c.userId}`); }}
             />
@@ -384,17 +442,17 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
         )}
       </div>
 
-      {/* Reply to banner */}
+      {/* Reply banner */}
       {replyingTo&&(
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 16px",background:C.bg2,borderTop:`1px solid ${C.border1}`,flexShrink:0}}>
           <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"13px",color:C.cyan}}>↩ Replying to @{replyingTo.userName}</div>
-          <div style={{color:C.muted,cursor:"pointer",fontSize:"16px",padding:"4px 8px",minWidth:"44px",minHeight:"44px",display:"flex",alignItems:"center",justifyContent:"flex-end"}}
+          <div style={{color:C.muted,cursor:"pointer",width:"44px",height:"44px",display:"flex",alignItems:"center",justifyContent:"flex-end"}}
             onClick={()=>{setReplyingTo(null); setText("");}}>✕</div>
         </div>
       )}
 
-      {/* INPUT — always at bottom, ABOVE the nav bar */}
-      <div style={{flexShrink:0,background:C.bg1,borderTop:`1px solid ${C.border1}`,padding:"12px 16px",paddingBottom:`calc(16px + env(safe-area-inset-bottom,0px))`}}>
+      {/* INPUT — always visible */}
+      <div style={{flexShrink:0,background:C.bg1,borderTop:`1px solid ${C.border1}`,padding:"12px 16px 16px"}}>
         <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
           {currentUser?.photoURL?(
             <img src={currentUser.photoURL} alt="" style={{width:"34px",height:"34px",borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>
@@ -406,18 +464,12 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
           <div style={{flex:1,display:"flex",alignItems:"center",gap:"8px",background:C.bg3,border:`1.5px solid ${C.border2}`,borderRadius:"24px",padding:"10px 14px"}}>
             <input
               ref={inputRef}
-              style={{
-                flex:1, background:"transparent", border:"none", outline:"none",
-                color:"#e0f2fe",           /* visible white text */
-                caretColor:"#00d4ff",
-                WebkitTextFillColor:"#e0f2fe", /* Safari */
-                fontSize:"15px",
-                fontFamily:"'DM Sans',sans-serif",
-              }}
+              style={{flex:1,background:"transparent",border:"none",outline:"none",color:"#e0f2fe",caretColor:"#00d4ff",WebkitTextFillColor:"#e0f2fe",fontSize:"16px",fontFamily:"'DM Sans',sans-serif"}}
               value={text}
               onChange={e=>setText(e.target.value)}
               placeholder={replyingTo?`Reply to @${replyingTo.userName}...`:"Add a comment..."}
               onKeyDown={e=>e.key==="Enter"&&postComment()}
+              onFocus={()=>setTimeout(()=>listRef.current?.scrollTo({top:99999,behavior:"smooth"}),300)}
               maxLength={200}
             />
             {text.trim().length>0&&(
@@ -439,7 +491,6 @@ function CommentRow({comment,videoId,currentUser,timeAgo,onReply,onProfileClick}
 
   return(
     <div style={{display:"flex",gap:"10px",padding:"12px 0",borderBottom:`1px solid ${C.bg3}`}}>
-      {/* Avatar — tap to view profile */}
       <div style={{cursor:"pointer",flexShrink:0}} onClick={onProfileClick}>
         {comment.userPhoto?(
           <img src={comment.userPhoto} alt="" style={{width:"34px",height:"34px",borderRadius:"50%",objectFit:"cover"}}/>
@@ -456,26 +507,18 @@ function CommentRow({comment,videoId,currentUser,timeAgo,onReply,onProfileClick}
           </span>
           <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:C.dim}}>{timeAgo(comment.createdAt)}</span>
         </div>
-        {/* Reply indicator */}
         {comment.replyToName&&(
           <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"12px",color:C.muted,marginBottom:"3px"}}>
             ↩ <span style={{color:C.cyan}}>@{comment.replyToName}</span>
           </div>
         )}
-        {/* Text */}
         <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"14px",color:"rgba(224,242,254,0.9)",lineHeight:"1.5",marginBottom:"6px"}}>{comment.text}</div>
-        {/* Actions */}
         <div style={{display:"flex",alignItems:"center",gap:"16px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"5px",cursor:"pointer"}} onClick={async(e)=>{
-            e.stopPropagation();
-            setLiked(!liked); setLikes(liked?likes-1:likes+1);
-          }}>
+          <div style={{display:"flex",alignItems:"center",gap:"5px",cursor:"pointer"}} onClick={()=>{setLiked(!liked);setLikes(liked?likes-1:likes+1);}}>
             <span style={{fontSize:"14px",color:liked?"#ff4d6d":C.muted}}>{liked?"❤️":"♡"}</span>
             {likes>0&&<span style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:C.muted}}>{likes}</span>}
           </div>
-          <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"12px",color:C.muted,cursor:"pointer",padding:"2px 0"}} onClick={onReply}>
-            Reply
-          </div>
+          <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"12px",color:C.muted,cursor:"pointer",minHeight:"36px",display:"flex",alignItems:"center"}} onClick={onReply}>Reply</div>
         </div>
       </div>
     </div>

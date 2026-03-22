@@ -14,6 +14,7 @@ import Toast from "./components/Toast";
 import NotificationBell from "./components/NotificationBell";
 import NotificationCenter from "./components/NotificationCenter";
 import UserProfile from "./pages/UserProfile";
+import FriendsList from "./pages/FriendsList";
 
 const C = {
   bg0:"#070d1a",bg1:"#0d1629",bg2:"#111f38",
@@ -98,6 +99,7 @@ function AppContent({ user }) {
         <Route path="/edit-profile" element={<EditProfile user={user}/>}/>
         <Route path="/friends" element={<FindFriends user={user}/>}/>
         <Route path="/profile/:userId" element={<UserProfile currentUser={user}/>}/>
+        <Route path="/my-friends" element={<FriendsList user={user}/>}/>
       </Routes>
 
       <NavBar user={user} onProfileOpen={()=>setProfileOpen(true)} onBellOpen={()=>setNotifOpen(true)}/>

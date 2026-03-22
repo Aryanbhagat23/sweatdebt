@@ -379,7 +379,8 @@ export default function ProfileOverlay({ user, isOpen, onClose }) {
               <div style={{ fontFamily: "'DM Mono',monospace", fontSize: "11px", color: text2, letterSpacing: "0.1em", marginBottom: "12px" }}>QUICK ACCESS</div>
               {[
                 { icon: "⚔️", label: "My Bets", sub: `${total} bets · ${incomingBets.length} challenges`, action: () => goTo("/bets") },
-                { icon: "🔍", label: "Find Friends", sub: "Search and add friends", action: () => goTo("/friends") },
+                {icon:"👥", label:"My Friends", sub:"See your friends list", action:()=>goTo("/my-friends")},
+                {icon:"🔍", label:"Find Friends", sub:"Search and add new friends", action:()=>goTo("/friends")},
                 { icon: "✏️", label: "Edit Profile", sub: "Change photo, username, bio", action: () => goTo("/edit-profile") },
                 { icon: "🎥", label: "My Videos", sub: `${videos.length} forfeit videos`, action: () => setActiveSection(activeSection === "videos" ? null : "videos") },
                 { icon: "🏆", label: "Leaderboard", sub: "See your ranking", action: () => goTo("/leaderboard") },
