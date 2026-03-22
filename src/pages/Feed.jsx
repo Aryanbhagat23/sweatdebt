@@ -375,9 +375,7 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
 
   return(
     <>
-    <style>{`
-      @keyframes slideUpPanel{from{transform:translateY(100%) translateX(-50%)}to{transform:translateY(0) translateX(-50%)}}
-      @keyframes spin{to{transform:rotate(360deg)}}
+    <style>{`@keyframes slideUpPanel{from{transform:translateY(100%)}to{transform:translateY(0)}}
     `}</style>
     {/* Backdrop covers full screen */}
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.65)",zIndex:2000}} onClick={onClose}/>
@@ -385,11 +383,12 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
     {/* Panel — shifts up when keyboard opens, fills full height above keyboard */}
     <div style={{
       position:"fixed",
-      bottom:`${keyboardHeight}px`,
-      left:"50%",
-      width:"100%",maxWidth:"480px",
-      // Full viewport height minus keyboard — so it truly fills screen
-      height:`calc(100vh - ${keyboardHeight}px)`,
+bottom:`${keyboardHeight}px`,
+left:0,
+right:0,
+width:"100%",
+maxWidth:"100vw",
+height:`calc(100vh - ${keyboardHeight}px)`,
       maxHeight:"100vh",
       background:C.bg1,
       borderRadius:keyboardHeight>0?"0":"20px 20px 0 0",
