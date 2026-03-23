@@ -1,27 +1,26 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { db } from "../firebase";
-import {
-  collection, query, onSnapshot,
-  doc, updateDoc, increment, addDoc, serverTimestamp,
-} from "firebase/firestore";
+import { collection, query, onSnapshot, doc, updateDoc, increment } from "firebase/firestore";
 import NotificationBell from "../components/NotificationBell";
-import { useNavigate } from "react-router-dom";
 import CommentsPanel from "../components/CommentsPanel";
+import { BadgeToast, StreakBadge } from "../components/BadgeDisplay";
+import { recordWin, recordLossApproved, recordDisputed } from "../utils/streaks";
+import { useNavigate } from "react-router-dom";
 
 const C = {
   bg0:"#070d1a", bg1:"#0d1629", bg2:"#111f38", bg3:"#172847",
   white:"#e0f2fe", muted:"#64748b", dim:"#3d5a7a",
   cyan:"#00d4ff", coral:"#ff6b4a", green:"#00e676",
-  red:"#ff4d6d", border1:"#1e3a5f", border2:"#2a4f7a",
-  purple:"#a855f7",
+  red:"#ff4d6d", border1:"#1e3a5f", border2:"#2a4f7a", purple:"#a855f7",
 };
 
-export default function Feed({ user, onBellClick, onCommentsToggle }) {
+export default function Feed({ user, onBellClick }) {
   const navigate = useNavigate();
   const [videos, setVideos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("forYou");
   const [friendIds, setFriendIds] = useState([]);
+  const [newBadge, setNewBadge] = useState(null); // badge toast
 
   useEffect(() => {
     if (!user) return;
@@ -58,6 +57,9 @@ export default function Feed({ user, onBellClick, onCommentsToggle }) {
 
   return (
     <div style={{minHeight:"100vh",background:C.bg0}}>
+      {/* Badge toast */}
+      {newBadge && <BadgeToast badgeId={newBadge} onClose={() => setNewBadge(null)} />}
+
       {/* Tab bar */}
       <div style={{position:"fixed",top:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"480px",zIndex:100,paddingTop:"env(safe-area-inset-top,0)"}}>
         <div style={{display:"flex",justifyContent:"center",gap:"24px",padding:"12px 20px 8px",background:"linear-gradient(to bottom,rgba(7,13,26,0.97),transparent)"}}>
@@ -90,56 +92,39 @@ export default function Feed({ user, onBellClick, onCommentsToggle }) {
       )}
 
       {displayVideos.length>0 && (
-        <ReelsFeed
-          videos={displayVideos}
-          user={user}
-          navigate={navigate}
-          onCommentsToggle={onCommentsToggle}
-        />
+        <ReelsFeed videos={displayVideos} user={user} navigate={navigate} onBadgeEarned={setNewBadge} />
       )}
     </div>
   );
 }
 
-function ReelsFeed({videos, user, navigate, onCommentsToggle}){
+function ReelsFeed({videos,user,navigate,onBadgeEarned}){
   const [currentIndex,setCurrentIndex]=useState(0);
   const startY=useRef(null);
-  const startTime=useRef(null);
   const containerRef=useRef(null);
-  const isAnimating=useRef(false);
+  const lastSwipe=useRef(0);
 
   useEffect(()=>setCurrentIndex(0),[videos]);
 
-  const goTo=(idx)=>{
-    if(isAnimating.current)return;
-    const clamped=Math.max(0,Math.min(videos.length-1,idx));
-    if(clamped===currentIndex)return;
-    isAnimating.current=true;
-    setCurrentIndex(clamped);
-    setTimeout(()=>{ isAnimating.current=false; },500);
-  };
-
-  const handleTouchStart=(e)=>{
-    startY.current=e.touches[0].clientY;
-    startTime.current=Date.now();
-  };
+  const handleTouchStart=(e)=>{ startY.current=e.touches[0].clientY; };
   const handleTouchEnd=(e)=>{
     if(startY.current===null)return;
     const diff=startY.current-e.changedTouches[0].clientY;
-    const elapsed=Date.now()-startTime.current;
-    const isMeaningful=Math.abs(diff)>50||(Math.abs(diff)>20&&elapsed<200);
-    if(isMeaningful){
-      if(diff>0) goTo(currentIndex+1);
-      else goTo(currentIndex-1);
+    const now=Date.now();
+    if(Math.abs(diff)>60&&now-lastSwipe.current>400){
+      lastSwipe.current=now;
+      if(diff>0&&currentIndex<videos.length-1) setCurrentIndex(p=>p+1);
+      else if(diff<0&&currentIndex>0) setCurrentIndex(p=>p-1);
     }
-    startY.current=null; startTime.current=null;
+    startY.current=null;
   };
 
   const handleWheel=useCallback((e)=>{
     e.preventDefault();
-    if(isAnimating.current)return;
-    if(e.deltaY>30) goTo(currentIndex+1);
-    else if(e.deltaY<-30) goTo(currentIndex-1);
+    const now=Date.now();
+    if(now-lastSwipe.current<600)return;
+    if(e.deltaY>40&&currentIndex<videos.length-1){lastSwipe.current=now;setCurrentIndex(p=>p+1);}
+    else if(e.deltaY<-40&&currentIndex>0){lastSwipe.current=now;setCurrentIndex(p=>p-1);}
   },[currentIndex,videos.length]);
 
   useEffect(()=>{
@@ -149,28 +134,21 @@ function ReelsFeed({videos, user, navigate, onCommentsToggle}){
   },[handleWheel]);
 
   return(
-    <div ref={containerRef} style={{height:"100vh",overflow:"hidden",position:"relative"}}
-      onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
-      {videos.map((video,index)=>{
-        if(Math.abs(index-currentIndex)>2)return null;
-        return(
-          <ReelCard key={video.id} video={video} user={user}
-            isActive={index===currentIndex} offset={index-currentIndex}
-            navigate={navigate} onCommentsToggle={onCommentsToggle}/>
-        );
-      })}
-      {/* Side dots */}
+    <div ref={containerRef} style={{height:"100vh",overflow:"hidden",position:"relative"}} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+      {videos.map((video,index)=>(
+        <ReelCard key={video.id} video={video} user={user} isActive={index===currentIndex} offset={index-currentIndex} navigate={navigate} onBadgeEarned={onBadgeEarned} />
+      ))}
       <div style={{position:"fixed",right:"8px",top:"50%",transform:"translateY(-50%)",display:"flex",flexDirection:"column",gap:"5px",zIndex:50}}>
         {videos.slice(Math.max(0,currentIndex-4),currentIndex+5).map((_,i)=>{
           const actual=Math.max(0,currentIndex-4)+i;
-          return <div key={actual} style={{width:"3px",height:actual===currentIndex?"18px":"4px",borderRadius:"2px",background:actual===currentIndex?C.cyan:"rgba(224,242,254,0.2)",transition:"all 0.3s",cursor:"pointer"}} onClick={()=>goTo(actual)}/>;
+          return <div key={actual} style={{width:"3px",height:actual===currentIndex?"18px":"4px",borderRadius:"2px",background:actual===currentIndex?C.cyan:"rgba(224,242,254,0.2)",transition:"all 0.3s",cursor:"pointer"}} onClick={()=>setCurrentIndex(actual)}/>;
         })}
       </div>
     </div>
   );
 }
 
-function ReelCard({video,user,isActive,offset,navigate,onCommentsToggle}){
+function ReelCard({video,user,isActive,offset,navigate,onBadgeEarned}){
   const videoRef=useRef(null);
   const [liked,setLiked]=useState(false);
   const [likes,setLikes]=useState(video.likes||0);
@@ -181,13 +159,10 @@ function ReelCard({video,user,isActive,offset,navigate,onCommentsToggle}){
   const [commentCount,setCommentCount]=useState(video.comments||0);
   const [muted,setMuted]=useState(false);
 
-  const openComments=()=>{ setShowComments(true); onCommentsToggle?.(true); };
-  const closeComments=()=>{ setShowComments(false); onCommentsToggle?.(false); };
-
   useEffect(()=>{
     const v=videoRef.current; if(!v)return;
-    if(isActive){ v.play().catch(()=>{}); }
-    else { v.pause(); closeComments(); }
+    if(isActive){v.play().catch(()=>{});}
+    else{v.pause(); v.currentTime=0; setShowComments(false);}
   },[isActive]);
 
   const canVerdict=!approved&&!disputed&&(
@@ -198,23 +173,38 @@ function ReelCard({video,user,isActive,offset,navigate,onCommentsToggle}){
     setLiked(!liked); setLikes(liked?likes-1:likes+1);
     await updateDoc(doc(db,"videos",video.id),{likes:increment(liked?-1:1)});
   };
+
   const handleApprove=async()=>{
     setApproving(true);
     try{
       await updateDoc(doc(db,"videos",video.id),{approved:true,disputed:false});
       if(video.betId&&video.betId!=="general") await updateDoc(doc(db,"bets",video.betId),{status:"lost"});
-      if(video.betCreatedBy) await updateDoc(doc(db,"users",video.betCreatedBy),{wins:increment(1),honour:increment(5)});
-      if(video.uploadedBy) await updateDoc(doc(db,"users",video.uploadedBy),{losses:increment(1),honour:increment(3)});
+
+      // Update scores + streaks + check badges
+      if(video.betCreatedBy){
+        const newBadges = await recordWin(video.betCreatedBy);
+        // Show badge toast to current user if they won
+        if(video.betCreatedBy === user?.uid && newBadges?.length > 0) {
+          onBadgeEarned(newBadges[0]);
+        }
+      }
+      if(video.uploadedBy){
+        const newBadges = await recordLossApproved(video.uploadedBy);
+        if(video.uploadedBy === user?.uid && newBadges?.length > 0) {
+          onBadgeEarned(newBadges[0]);
+        }
+      }
       setApproved(true);
     }catch(e){console.error(e);}
     setApproving(false);
   };
+
   const handleDispute=async()=>{
     setApproving(true);
     try{
       await updateDoc(doc(db,"videos",video.id),{disputed:true,approved:false});
       if(video.betId&&video.betId!=="general") await updateDoc(doc(db,"bets",video.betId),{status:"disputed"});
-      if(video.uploadedBy) await updateDoc(doc(db,"users",video.uploadedBy),{losses:increment(1),honour:increment(-15)});
+      if(video.uploadedBy) await recordDisputed(video.uploadedBy);
       setDisputed(true);
     }catch(e){console.error(e);}
     setApproving(false);
@@ -230,20 +220,11 @@ function ReelCard({video,user,isActive,offset,navigate,onCommentsToggle}){
   return(
     <>
     <style>{`@keyframes heartPop{0%{transform:scale(1)}50%{transform:scale(1.4)}100%{transform:scale(1)}}`}</style>
-    <div style={{
-      position:"absolute",inset:0,
-      transform:`translateY(${offset*100}%)`,
-      transition:offset===0?"none":"transform 0.42s cubic-bezier(0.25,0.46,0.45,0.94)",
-      background:C.bg0,overflow:"hidden",
-      pointerEvents:isActive?"all":"none",
-    }}>
-      <video ref={videoRef} src={video.videoUrl}
-        style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}}
-        loop playsInline muted={muted} preload="metadata"
-        onClick={()=>setMuted(!muted)}/>
+    <div style={{position:"absolute",inset:0,transform:`translateY(${offset*100}%)`,transition:"transform 0.45s cubic-bezier(0.25,0.46,0.45,0.94)",background:C.bg0,overflow:"hidden"}}>
+      <video ref={videoRef} src={video.videoUrl} style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}} loop playsInline muted={muted} preload={isActive?"auto":"none"} onClick={()=>setMuted(!muted)}/>
       <div style={{position:"absolute",inset:0,pointerEvents:"none",background:"linear-gradient(to top,rgba(7,13,26,0.97) 0%,rgba(7,13,26,0.2) 30%,transparent 55%,rgba(7,13,26,0.5) 100%)"}}/>
 
-      {/* Status tag */}
+      {/* Status */}
       <div style={{position:"absolute",top:"60px",left:"16px"}}>
         {approved&&<div style={{background:"rgba(0,230,118,0.2)",border:"1px solid rgba(0,230,118,0.6)",color:C.green,padding:"4px 12px",borderRadius:"20px",fontFamily:"'DM Mono',monospace",fontSize:"11px",fontWeight:"700"}}>APPROVED ✓</div>}
         {disputed&&<div style={{background:"rgba(255,77,109,0.2)",border:"1px solid rgba(255,77,109,0.6)",color:C.red,padding:"4px 12px",borderRadius:"20px",fontFamily:"'DM Mono',monospace",fontSize:"11px",fontWeight:"700"}}>DISPUTED ✗</div>}
@@ -255,7 +236,7 @@ function ReelCard({video,user,isActive,offset,navigate,onCommentsToggle}){
       <div style={{position:"absolute",right:"12px",bottom:"100px",display:"flex",flexDirection:"column",gap:"20px",alignItems:"center",zIndex:10}}>
         {[
           {icon:liked?"❤️":"🤍",count:likes,onClick:handleLike},
-          {icon:"💬",count:commentCount,onClick:openComments},
+          {icon:"💬",count:commentCount,onClick:()=>setShowComments(true)},
           {icon:"↗️",label:"Share",onClick:async()=>{if(navigator.share)await navigator.share({title:"SweatDebt forfeit",url:window.location.href});else navigator.clipboard.writeText(window.location.href);}},
           {icon:"⚔️",label:"Bet",onClick:()=>navigate("/create")},
         ].map((btn,i)=>(
@@ -269,14 +250,11 @@ function ReelCard({video,user,isActive,offset,navigate,onCommentsToggle}){
 
       {/* Bottom info */}
       <div style={{position:"absolute",bottom:0,left:0,right:"60px",padding:"0 16px 90px",zIndex:10}}>
-        <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"12px",cursor:"pointer"}} onClick={()=>navigate(`/profile/${video.uploadedBy}`)}>
-          {video.uploaderPhoto?(
-            <img src={video.uploaderPhoto} alt="" style={{width:"42px",height:"42px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${C.cyan}`,flexShrink:0}}/>
-          ):(
-            <div style={{width:"42px",height:"42px",borderRadius:"50%",background:`linear-gradient(135deg,${C.cyan},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:"18px",color:"#000",border:`2px solid ${C.cyan}`,flexShrink:0}}>
-              {video.uploadedByName?.charAt(0)||"?"}
-            </div>
-          )}
+        <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"8px",cursor:"pointer"}} onClick={()=>navigate(`/profile/${video.uploadedBy}`)}>
+          {video.uploaderPhoto
+            ?<img src={video.uploaderPhoto} alt="" style={{width:"42px",height:"42px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${C.cyan}`,flexShrink:0}}/>
+            :<div style={{width:"42px",height:"42px",borderRadius:"50%",background:`linear-gradient(135deg,${C.cyan},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:"18px",color:"#000",border:`2px solid ${C.cyan}`,flexShrink:0}}>{video.uploadedByName?.charAt(0)||"?"}</div>
+          }
           <div>
             <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"15px",fontWeight:"700",color:C.white}}>@{video.uploadedByName?.toLowerCase().replace(/\s/g,"")}</div>
             <div style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:"rgba(224,242,254,0.4)"}}>{timeAgo(video.createdAt)}</div>
@@ -292,61 +270,12 @@ function ReelCard({video,user,isActive,offset,navigate,onCommentsToggle}){
             </div>
           </div>
         )}
-        {approved&&<div style={{background:"rgba(0,230,118,0.15)",border:"1px solid rgba(0,230,118,0.4)",borderRadius:"10px",padding:"10px 14px",fontFamily:"'DM Sans',sans-serif",fontSize:"13px",color:C.green,textAlign:"center",marginBottom:"10px"}}>✓ Approved! Scores updated 🏆</div>}
+        {approved&&<div style={{background:"rgba(0,230,118,0.15)",border:"1px solid rgba(0,230,118,0.4)",borderRadius:"10px",padding:"10px 14px",fontFamily:"'DM Sans',sans-serif",fontSize:"13px",color:C.green,textAlign:"center",marginBottom:"10px"}}>✓ Forfeit approved! Scores updated 🏆</div>}
         {disputed&&<div style={{background:"rgba(255,77,109,0.15)",border:"1px solid rgba(255,77,109,0.4)",borderRadius:"10px",padding:"10px 14px",fontFamily:"'DM Sans',sans-serif",fontSize:"13px",color:C.red,textAlign:"center",marginBottom:"10px"}}>⚠ Disputed — honour dropped</div>}
       </div>
 
-      {/* Comments panel — full screen, nav already hidden by App.js */}
-      {showComments&&(
-        <CommentsPanel
-          videoId={video.id}
-          currentUser={user}
-          onCountChange={setCommentCount}
-          onClose={closeComments}
-          navigate={navigate}
-        />
-      )}
+      {showComments&&<CommentsPanel videoId={video.id} currentUser={user} onCountChange={setCommentCount} onClose={()=>setShowComments(false)}/>}
     </div>
     </>
-  );
-}
-
-function CommentRow({comment,videoId,currentUser,timeAgo,onReply,onProfileClick}){
-  const [liked,setLiked]=useState(false);
-  const [likes,setLikes]=useState(comment.likes||0);
-  const isOwn=comment.userId===currentUser?.uid;
-  return(
-    <div style={{display:"flex",gap:"10px",padding:"12px 0",borderBottom:`1px solid ${C.bg3}`}}>
-      <div style={{cursor:"pointer",flexShrink:0}} onClick={onProfileClick}>
-        {comment.userPhoto?(
-          <img src={comment.userPhoto} alt="" style={{width:"34px",height:"34px",borderRadius:"50%",objectFit:"cover"}}/>
-        ):(
-          <div style={{width:"34px",height:"34px",borderRadius:"50%",background:`linear-gradient(135deg,${C.cyan},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Bebas Neue',sans-serif",fontSize:"13px",color:"#000"}}>
-            {comment.userName?.charAt(0)||"?"}
-          </div>
-        )}
-      </div>
-      <div style={{flex:1}}>
-        <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"4px"}}>
-          <span style={{fontFamily:"'DM Sans',sans-serif",fontSize:"13px",fontWeight:"600",color:isOwn?C.cyan:C.white,cursor:"pointer"}} onClick={onProfileClick}>
-            {isOwn?"You":comment.userName}
-          </span>
-          <span style={{fontFamily:"'DM Mono',monospace",fontSize:"10px",color:C.dim}}>{timeAgo(comment.createdAt)}</span>
-        </div>
-        {comment.replyToName&&(
-          <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"12px",color:C.muted,marginBottom:"3px"}}>
-            ↩ <span style={{color:C.cyan}}>@{comment.replyToName}</span>
-          </div>
-        )}
-        <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"14px",color:"rgba(224,242,254,0.9)",lineHeight:"1.5",marginBottom:"6px"}}>{comment.text}</div>
-        <div style={{display:"flex",alignItems:"center",gap:"16px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:"5px",cursor:"pointer"}} onClick={()=>{setLiked(!liked);setLikes(liked?likes-1:likes+1);}}>
-            <span style={{fontSize:"14px",color:liked?"#ff4d6d":C.muted}}>{liked?"❤️":"♡"}</span>
-            {likes>0&&<span style={{fontFamily:"'DM Mono',monospace",fontSize:"11px",color:C.muted}}>{likes}</span>}
-          </div>
-          <div style={{fontFamily:"'DM Sans',sans-serif",fontSize:"12px",color:C.muted,cursor:"pointer",minHeight:"36px",display:"flex",alignItems:"center"}} onClick={onReply}>Reply</div>
-        </div>
-      </div>
-    </div>
   );
 }
