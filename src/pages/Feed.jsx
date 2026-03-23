@@ -6,6 +6,7 @@ import {
 } from "firebase/firestore";
 import NotificationBell from "../components/NotificationBell";
 import { useNavigate } from "react-router-dom";
+import CommentsPanel from "../components/CommentsPanel";
 
 const C = {
   bg0:"#070d1a", bg1:"#0d1629", bg2:"#111f38", bg3:"#172847",
@@ -383,12 +384,12 @@ function CommentsPanel({videoId,currentUser,onCountChange,onClose,navigate}){
     {/* Panel — shifts up when keyboard opens, fills full height above keyboard */}
     <div style={{
       position:"fixed",
-bottom:`${keyboardHeight}px`,
-left:0,
-right:0,
-width:"100%",
-maxWidth:"100vw",
-height:`calc(100vh - ${keyboardHeight}px)`,
+      bottom:`${keyboardHeight}px`,
+      left:0,
+      right:0,
+      width:"100%",
+      maxWidth:"100vw",
+      height:`calc(100vh - ${keyboardHeight}px)`,
       maxHeight:"100vh",
       background:C.bg1,
       borderRadius:keyboardHeight>0?"0":"20px 20px 0 0",

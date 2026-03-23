@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { db } from "../firebase";
 import {
-  collection, query, where, getDocs,
-  orderBy, startAt, endAt, doc,
-  setDoc, deleteDoc, serverTimestamp
+  collection, query, orderBy, startAt, endAt,
+  getDocs, doc, setDoc, deleteDoc, serverTimestamp,
 } from "firebase/firestore";
+
+const C = {
+  bg0:"#070d1a", bg1:"#0d1629", bg2:"#111f38", bg3:"#172847",
+  white:"#e0f2fe", muted:"#64748b", dim:"#3d5a7a",
+  cyan:"#00d4ff", cyanDim:"rgba(0,212,255,0.12)", cyanBorder:"rgba(0,212,255,0.3)",
+  green:"#00e676", red:"#ff4d6d", border1:"#1e3a5f", border2:"#2a4f7a", purple:"#a855f7",
+};
 
 export default function UserSearch({ onSelectUser, currentUser, onClose }) {
   const [searchText, setSearchText] = useState("");
@@ -12,47 +18,38 @@ export default function UserSearch({ onSelectUser, currentUser, onClose }) {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [friends, setFriends] = useState({});
-  const [friendLoading, setFriendLoading] = useState({});
+  const [pendingSent, setPendingSent] = useState({});
+  const [actionLoading, setActionLoading] = useState({});
 
-  // Load existing friends on mount
   useEffect(() => {
     if (!currentUser) return;
-    const loadFriends = async () => {
-      try {
-        const snap = await getDocs(collection(db, "users", currentUser.uid, "friends"));
-        const f = {};
-        snap.docs.forEach(d => { f[d.id] = true; });
-        setFriends(f);
-      } catch (e) {
-        console.error("Load friends error:", e);
-      }
-    };
-    loadFriends();
+    // Load existing friends
+    getDocs(collection(db, "users", currentUser.uid, "friends")).then(snap => {
+      const f = {};
+      snap.docs.forEach(d => { f[d.id] = true; });
+      setFriends(f);
+    });
+    // Load pending sent requests
+    getDocs(query(collection(db, "notifications"),
+      ...[require("firebase/firestore").where("fromUserId", "==", currentUser.uid),
+          require("firebase/firestore").where("type", "==", "friend_request")]
+    )).then(snap => {
+      const p = {};
+      snap.docs.forEach(d => { p[d.data().toUserId] = true; });
+      setPendingSent(p);
+    }).catch(() => {});
   }, [currentUser]);
 
   const search = async (text) => {
     setSearchText(text);
-    if (text.trim().length < 2) {
-      setResults([]);
-      setSearched(false);
-      return;
-    }
+    if (text.trim().length < 2) { setResults([]); setSearched(false); return; }
     setLoading(true);
     try {
       const lower = text.toLowerCase().trim();
-      const uq = query(
-        collection(db, "users"),
-        orderBy("username"),
-        startAt(lower),
-        endAt(lower + "\uf8ff")
-      );
-      const nq = query(
-        collection(db, "users"),
-        orderBy("displayName"),
-        startAt(text),
-        endAt(text + "\uf8ff")
-      );
-      const [uSnap, nSnap] = await Promise.all([getDocs(uq), getDocs(nq)]);
+      const [uSnap, nSnap] = await Promise.all([
+        getDocs(query(collection(db,"users"), orderBy("username"), startAt(lower), endAt(lower+"\uf8ff"))),
+        getDocs(query(collection(db,"users"), orderBy("displayName"), startAt(text), endAt(text+"\uf8ff"))),
+      ]);
       const seen = new Set();
       const users = [];
       [...uSnap.docs, ...nSnap.docs].forEach(d => {
@@ -63,242 +60,157 @@ export default function UserSearch({ onSelectUser, currentUser, onClose }) {
       });
       setResults(users);
       setSearched(true);
-    } catch (e) {
-      console.error("Search error:", e);
-      // If index not ready, try simple fetch
+    } catch {
+      // Fallback if indexes not ready
       try {
-        const allSnap = await getDocs(collection(db, "users"));
+        const all = await getDocs(collection(db, "users"));
         const lower = text.toLowerCase().trim();
-        const users = allSnap.docs
+        const users = all.docs
           .filter(d => d.id !== currentUser.uid)
           .map(d => ({ id: d.id, ...d.data() }))
-          .filter(u =>
-            u.displayName?.toLowerCase().includes(lower) ||
-            u.username?.toLowerCase().includes(lower)
-          );
+          .filter(u => u.displayName?.toLowerCase().includes(lower) || u.username?.toLowerCase().includes(lower));
         setResults(users);
         setSearched(true);
-      } catch (e2) {
-        console.error("Fallback search error:", e2);
-      }
+      } catch (e2) { console.error(e2); }
     }
     setLoading(false);
   };
 
-  const toggleFriend = async (targetUser) => {
-    const uid = targetUser.id;
-    setFriendLoading(prev => ({ ...prev, [uid]: true }));
+  const sendRequest = async (target) => {
+    const uid = target.id;
+    setActionLoading(p => ({ ...p, [uid]: true }));
     try {
-      const myFriendRef = doc(db, "users", currentUser.uid, "friends", uid);
-      const theirFriendRef = doc(db, "users", uid, "friends", currentUser.uid);
+      await setDoc(doc(db, "notifications", `${uid}_friend_request_${currentUser.uid}`), {
+        toUserId: uid, fromUserId: currentUser.uid,
+        fromName: currentUser.displayName, fromPhoto: currentUser.photoURL || null,
+        type: "friend_request",
+        message: `${currentUser.displayName} sent you a friend request`,
+        read: false, createdAt: serverTimestamp(),
+      });
+      setPendingSent(p => ({ ...p, [uid]: true }));
+    } catch (e) { console.error(e); }
+    setActionLoading(p => ({ ...p, [uid]: false }));
+  };
 
-      if (friends[uid]) {
-        // Remove friend — both sides
-        await deleteDoc(myFriendRef);
-        await deleteDoc(theirFriendRef);
-        setFriends(prev => { const n = { ...prev }; delete n[uid]; return n; });
-      } else {
-        // Add friend — both sides
-        await setDoc(myFriendRef, {
-          uid: targetUser.id,
-          displayName: targetUser.displayName,
-          email: targetUser.email,
-          username: targetUser.username,
-          photoURL: targetUser.photoURL || null,
-          addedAt: serverTimestamp(),
-        });
-        await setDoc(theirFriendRef, {
-          uid: currentUser.uid,
-          displayName: currentUser.displayName,
-          email: currentUser.email,
-          username: currentUser.displayName?.toLowerCase().replace(/\s/g, "") || "",
-          photoURL: currentUser.photoURL || null,
-          addedAt: serverTimestamp(),
-        });
-        setFriends(prev => ({ ...prev, [uid]: true }));
-      }
-    } catch (e) {
-      console.error("Toggle friend error:", e);
-    }
-    setFriendLoading(prev => ({ ...prev, [uid]: false }));
+  const cancelRequest = async (target) => {
+    const uid = target.id;
+    setActionLoading(p => ({ ...p, [uid]: true }));
+    try {
+      await deleteDoc(doc(db, "notifications", `${uid}_friend_request_${currentUser.uid}`));
+      setPendingSent(p => { const n = { ...p }; delete n[uid]; return n; });
+    } catch (e) { console.error(e); }
+    setActionLoading(p => ({ ...p, [uid]: false }));
+  };
+
+  const removeFriend = async (target) => {
+    const uid = target.id;
+    setActionLoading(p => ({ ...p, [uid]: true }));
+    try {
+      await deleteDoc(doc(db, "users", currentUser.uid, "friends", uid));
+      await deleteDoc(doc(db, "users", uid, "friends", currentUser.uid));
+      setFriends(p => { const n = { ...p }; delete n[uid]; return n; });
+    } catch (e) { console.error(e); }
+    setActionLoading(p => ({ ...p, [uid]: false }));
   };
 
   return (
-    <div style={S.wrap}>
+    <div style={{ flex:1 }}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
       {/* Search input */}
-      <div style={S.searchRow}>
-        <div style={S.searchBox}>
-          <span style={S.searchIcon}>🔍</span>
+      <div style={{ display:"flex", alignItems:"center", gap:"10px", padding:"16px 16px 12px" }}>
+        <div style={{ flex:1, display:"flex", alignItems:"center", gap:"8px", background:C.bg2, border:`1px solid ${C.border1}`, borderRadius:"14px", padding:"10px 14px" }}>
+          <span style={{ fontSize:"16px", flexShrink:0 }}>🔍</span>
           <input
-            style={S.input}
-            placeholder="Search by name or username..."
+            style={{ flex:1, background:"none", border:"none", outline:"none", color:C.white, fontSize:"16px", fontFamily:"'DM Sans',sans-serif" }}
+            placeholder="Search by name or @username..."
             value={searchText}
             onChange={e => search(e.target.value)}
             autoFocus
           />
           {searchText.length > 0 && (
-            <span style={S.clearBtn} onClick={() => {
-              setSearchText(""); setResults([]); setSearched(false);
-            }}>✕</span>
+            <span style={{ fontSize:"14px", color:C.muted, cursor:"pointer", padding:"2px 4px" }}
+              onClick={() => { setSearchText(""); setResults([]); setSearched(false); }}>✕</span>
           )}
         </div>
-        {onClose && (
-          <button style={S.cancelBtn} onClick={onClose}>Cancel</button>
-        )}
+        {onClose && <button style={{ background:"none", border:"none", color:C.cyan, fontSize:"15px", fontWeight:"500", cursor:"pointer", flexShrink:0, padding:"8px 4px", fontFamily:"'DM Sans',sans-serif" }} onClick={onClose}>Cancel</button>}
       </div>
 
-      {/* Loading */}
       {loading && (
-        <div style={S.center}>
-          <div style={S.spinner} />
-          <div style={S.loadingText}>Searching...</div>
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"48px 20px", gap:"12px" }}>
+          <div style={{ width:"32px", height:"32px", borderRadius:"50%", border:`3px solid ${C.border1}`, borderTop:`3px solid ${C.cyan}`, animation:"spin 0.8s linear infinite" }} />
+          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"12px", color:C.muted }}>Searching...</div>
         </div>
       )}
 
-      {/* No results */}
       {!loading && searched && results.length === 0 && (
-        <div style={S.center}>
-          <div style={{ fontSize: "40px", marginBottom: "12px" }}>🔍</div>
-          <div style={S.emptyText}>No users found</div>
-          <div style={S.emptySub}>Try a different name or ask them to join SweatDebt</div>
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"48px 20px", gap:"12px" }}>
+          <div style={{ fontSize:"40px" }}>🔍</div>
+          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"22px", color:C.muted, letterSpacing:"0.04em" }}>No users found</div>
+          <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:"13px", color:C.dim, textAlign:"center" }}>Try a different name or ask them to join SweatDebt</div>
         </div>
       )}
 
-      {/* Hint */}
       {!loading && !searched && (
-        <div style={S.hintWrap}>
-          <div style={{ fontSize: "48px", marginBottom: "16px" }}>👥</div>
-          <div style={S.hintTitle}>Find Your Friends</div>
-          <div style={S.hintSub}>Type at least 2 characters to search</div>
-          <div style={S.hintTips}>
-            <div style={S.tip}>💡 Search by first name or username</div>
-            <div style={S.tip}>💡 Add friends to see them in your bets</div>
-            <div style={S.tip}>💡 They need to have signed in at least once</div>
+        <div style={{ padding:"32px 24px", textAlign:"center" }}>
+          <div style={{ fontSize:"48px", marginBottom:"16px" }}>👥</div>
+          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"28px", color:C.white, marginBottom:"8px", letterSpacing:"0.04em" }}>Find Friends</div>
+          <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:"14px", color:C.muted, marginBottom:"20px" }}>Type at least 2 characters to search</div>
+          <div style={{ background:C.bg2, border:`1px solid ${C.border1}`, borderRadius:"14px", padding:"16px", textAlign:"left" }}>
+            {["Search by first name or @username", "Send a friend request — they accept or decline", "Friends can see each other's videos and challenge each other"].map(tip => (
+              <div key={tip} style={{ fontFamily:"'DM Sans',sans-serif", fontSize:"13px", color:C.muted, lineHeight:"1.8" }}>💡 {tip}</div>
+            ))}
           </div>
         </div>
       )}
 
-      {/* Results */}
       {!loading && results.length > 0 && (
-        <div style={S.results}>
-          <div style={S.resultsLabel}>
+        <div style={{ padding:"0 16px" }}>
+          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:C.muted, letterSpacing:"0.1em", marginBottom:"12px", textTransform:"uppercase" }}>
             {results.length} user{results.length > 1 ? "s" : ""} found
           </div>
-          {results.map(u => (
-            <UserCard
-              key={u.id}
-              user={u}
-              isFriend={!!friends[u.id]}
-              friendLoading={!!friendLoading[u.id]}
-              onToggleFriend={() => toggleFriend(u)}
-              onChallenge={() => onSelectUser(u)}
-            />
-          ))}
+          {results.map(u => {
+            const isFriend = !!friends[u.id];
+            const isPending = !!pendingSent[u.id];
+            const isLoading = !!actionLoading[u.id];
+            return (
+              <div key={u.id} style={{ display:"flex", alignItems:"center", gap:"12px", background:C.bg2, border:`1px solid ${isFriend ? C.cyanBorder : C.border1}`, borderRadius:"16px", padding:"14px", marginBottom:"10px" }}>
+                <div style={{ position:"relative", flexShrink:0, cursor:"pointer" }} onClick={() => onSelectUser(u)}>
+                  {u.photoURL
+                    ? <img src={u.photoURL} alt="" style={{ width:"52px", height:"52px", borderRadius:"50%", objectFit:"cover", border:`2px solid ${isFriend ? C.cyan : C.border2}` }} />
+                    : <div style={{ width:"52px", height:"52px", borderRadius:"50%", background:`linear-gradient(135deg,${C.cyan},${C.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Bebas Neue',sans-serif", fontSize:"20px", color:"#000" }}>{u.displayName?.charAt(0)||"?"}</div>
+                  }
+                  {isFriend && <div style={{ position:"absolute", bottom:"-2px", right:"-2px", width:"18px", height:"18px", borderRadius:"50%", background:C.green, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"10px", color:"#000", fontWeight:"700", border:`2px solid ${C.bg2}` }}>✓</div>}
+                </div>
+                <div style={{ flex:1, minWidth:0, cursor:"pointer" }} onClick={() => onSelectUser(u)}>
+                  <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:"15px", fontWeight:"600", color:C.white, marginBottom:"2px" }}>{u.displayName}</div>
+                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"12px", color:C.muted, marginBottom:"4px" }}>@{u.username}</div>
+                  {u.bio && <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:"12px", color:C.dim, marginBottom:"4px" }}>{u.bio.slice(0,40)}{u.bio.length>40?"...":""}</div>}
+                  <div style={{ display:"flex", gap:"4px", flexWrap:"wrap" }}>
+                    <span style={{ fontSize:"10px", color:C.muted, background:C.bg3, padding:"2px 6px", borderRadius:"8px" }}>⚔️ {(u.wins||0)+(u.losses||0)}</span>
+                    <span style={{ fontSize:"10px", color:C.green, background:C.bg3, padding:"2px 6px", borderRadius:"8px" }}>✓ {u.wins||0}W</span>
+                    <span style={{ fontSize:"10px", color:C.cyan, background:C.bg3, padding:"2px 6px", borderRadius:"8px" }}>⭐ {u.honour||100}</span>
+                  </div>
+                </div>
+                <div style={{ display:"flex", flexDirection:"column", gap:"6px", flexShrink:0 }}>
+                  {isFriend ? (
+                    <button style={{ padding:"7px 12px", borderRadius:"10px", fontFamily:"'DM Sans',sans-serif", fontSize:"12px", fontWeight:"600", cursor:"pointer", whiteSpace:"nowrap", background:C.bg3, color:C.muted, border:`1px solid ${C.border1}`, opacity:isLoading?0.6:1 }}
+                      onClick={() => removeFriend(u)} disabled={isLoading}>{isLoading?"...":"✓ Friends"}</button>
+                  ) : isPending ? (
+                    <button style={{ padding:"7px 12px", borderRadius:"10px", fontFamily:"'DM Sans',sans-serif", fontSize:"12px", cursor:"pointer", whiteSpace:"nowrap", background:C.cyanDim, color:C.cyan, border:`1px solid ${C.cyanBorder}`, opacity:isLoading?0.6:1 }}
+                      onClick={() => cancelRequest(u)} disabled={isLoading}>{isLoading?"...":"Pending ✕"}</button>
+                  ) : (
+                    <button style={{ padding:"7px 14px", borderRadius:"10px", fontFamily:"'DM Sans',sans-serif", fontSize:"12px", fontWeight:"600", cursor:"pointer", whiteSpace:"nowrap", background:`linear-gradient(135deg,${C.cyan},${C.purple})`, color:"#000", border:"none", opacity:isLoading?0.6:1 }}
+                      onClick={() => sendRequest(u)} disabled={isLoading}>{isLoading?"...":"+ Add"}</button>
+                  )}
+                  <button style={{ padding:"7px 12px", borderRadius:"10px", fontFamily:"'DM Sans',sans-serif", fontSize:"12px", color:C.muted, background:"transparent", border:`1px solid ${C.border1}`, cursor:"pointer", whiteSpace:"nowrap" }}
+                    onClick={() => onSelectUser(u)}>⚔️ Bet</button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
-
-function UserCard({ user, isFriend, friendLoading, onToggleFriend, onChallenge }) {
-  const [pressed, setPressed] = useState(false);
-
-  return (
-    <div
-      style={{
-        ...S.userCard,
-        transform: pressed ? "scale(0.98)" : "scale(1)",
-        transition: "all 0.15s",
-      }}
-      onMouseDown={() => setPressed(true)}
-      onMouseUp={() => setPressed(false)}
-      onTouchStart={() => setPressed(true)}
-      onTouchEnd={() => setPressed(false)}
-    >
-      {/* Avatar */}
-      <div style={S.avatarWrap} onClick={onChallenge}>
-        {user.photoURL ? (
-          <img src={user.photoURL} alt={user.displayName} style={S.avatarImg} />
-        ) : (
-          <div style={S.avatarFallback}>
-            {user.displayName?.charAt(0)?.toUpperCase() || "?"}
-          </div>
-        )}
-        {isFriend && <div style={S.friendBadge}>✓</div>}
-      </div>
-
-      {/* Info */}
-      <div style={S.userInfo} onClick={onChallenge}>
-        <div style={S.userName}>{user.displayName}</div>
-        <div style={S.userHandle}>@{user.username}</div>
-        {user.bio && (
-          <div style={S.userBio}>
-            {user.bio.slice(0, 40)}{user.bio.length > 40 ? "..." : ""}
-          </div>
-        )}
-        <div style={S.userStats}>
-          <span style={S.statChip}>⚔️ {(user.wins || 0) + (user.losses || 0)}</span>
-          <span style={{ ...S.statChip, color: "#00e676" }}>✓ {user.wins || 0}W</span>
-          <span style={{ ...S.statChip, color: "#d4ff00" }}>⭐ {user.honour || 100}</span>
-        </div>
-      </div>
-
-      {/* Buttons */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "6px", flexShrink: 0 }}>
-        <button
-          style={{
-            ...S.friendBtn,
-            background: isFriend ? "#1a1a1a" : "#d4ff00",
-            color: isFriend ? "#888" : "#000",
-            border: isFriend ? "1px solid #333" : "none",
-            opacity: friendLoading ? 0.6 : 1,
-          }}
-          onClick={e => { e.stopPropagation(); onToggleFriend(); }}
-          disabled={friendLoading}
-        >
-          {friendLoading ? "..." : isFriend ? "✓ Friends" : "+ Add"}
-        </button>
-        <button style={S.challengeBtn} onClick={e => { e.stopPropagation(); onChallenge(); }}>
-          ⚔️ Bet
-        </button>
-      </div>
-    </div>
-  );
-}
-
-const S = {
-  wrap: { flex: 1 },
-  searchRow: { display: "flex", alignItems: "center", gap: "10px", padding: "16px 16px 12px" },
-  searchBox: { flex: 1, display: "flex", alignItems: "center", gap: "8px", background: "#1a1a1a", border: "1px solid #333", borderRadius: "14px", padding: "10px 14px" },
-  searchIcon: { fontSize: "16px", flexShrink: 0 },
-  input: { flex: 1, background: "none", border: "none", outline: "none", color: "#f5f0e8", fontSize: "16px", fontFamily: "'DM Sans',sans-serif" },
-  clearBtn: { fontSize: "14px", color: "#555", cursor: "pointer", padding: "2px 4px" },
-  cancelBtn: { background: "none", border: "none", color: "#d4ff00", fontSize: "15px", fontWeight: "500", cursor: "pointer", flexShrink: 0, padding: "8px 4px", fontFamily: "'DM Sans',sans-serif" },
-  center: { display: "flex", flexDirection: "column", alignItems: "center", padding: "48px 20px", gap: "12px" },
-  spinner: { width: "32px", height: "32px", borderRadius: "50%", border: "3px solid #222", borderTop: "3px solid #d4ff00", animation: "spin 0.8s linear infinite" },
-  loadingText: { fontFamily: "'DM Mono',monospace", fontSize: "12px", color: "#555" },
-  emptyText: { fontFamily: "'Bebas Neue',sans-serif", fontSize: "24px", color: "#555", letterSpacing: "0.04em", textAlign: "center" },
-  emptySub: { fontFamily: "'DM Sans',sans-serif", fontSize: "13px", color: "#444", textAlign: "center" },
-  hintWrap: { padding: "32px 24px", textAlign: "center" },
-  hintTitle: { fontFamily: "'Bebas Neue',sans-serif", fontSize: "28px", color: "#f5f0e8", marginBottom: "8px", letterSpacing: "0.04em" },
-  hintSub: { fontFamily: "'DM Sans',sans-serif", fontSize: "14px", color: "#666", marginBottom: "20px" },
-  hintTips: { display: "flex", flexDirection: "column", gap: "10px", textAlign: "left", background: "#1a1a1a", borderRadius: "14px", padding: "16px" },
-  tip: { fontFamily: "'DM Sans',sans-serif", fontSize: "13px", color: "#888", lineHeight: "1.5" },
-  results: { padding: "0 16px" },
-  resultsLabel: { fontFamily: "'DM Mono',monospace", fontSize: "11px", color: "#555", letterSpacing: "0.1em", marginBottom: "12px", textTransform: "uppercase" },
-  userCard: { display: "flex", alignItems: "center", gap: "12px", background: "#1a1a1a", border: "1px solid #222", borderRadius: "16px", padding: "14px", marginBottom: "10px" },
-  avatarWrap: { position: "relative", width: "52px", height: "52px", flexShrink: 0, cursor: "pointer" },
-  avatarImg: { width: "52px", height: "52px", borderRadius: "50%", objectFit: "cover", border: "2px solid #d4ff00" },
-  avatarFallback: { width: "52px", height: "52px", borderRadius: "50%", background: "linear-gradient(135deg,#d4ff00,#ff5c1a)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Bebas Neue',sans-serif", fontSize: "20px", color: "#000" },
-  friendBadge: { position: "absolute", bottom: "-2px", right: "-2px", width: "18px", height: "18px", borderRadius: "50%", background: "#00e676", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "10px", color: "#000", fontWeight: "700", border: "2px solid #111" },
-  userInfo: { flex: 1, minWidth: 0, cursor: "pointer" },
-  userName: { fontFamily: "'DM Sans',sans-serif", fontSize: "15px", fontWeight: "600", color: "#f5f0e8", marginBottom: "2px" },
-  userHandle: { fontFamily: "'DM Mono',monospace", fontSize: "12px", color: "#666", marginBottom: "4px" },
-  userBio: { fontFamily: "'DM Sans',sans-serif", fontSize: "12px", color: "#555", marginBottom: "4px", lineHeight: "1.3" },
-  userStats: { display: "flex", gap: "4px", flexWrap: "wrap" },
-  statChip: { fontSize: "10px", color: "#888", background: "#222", padding: "2px 6px", borderRadius: "8px" },
-  friendBtn: { padding: "8px 14px", borderRadius: "10px", fontFamily: "'DM Sans',sans-serif", fontSize: "12px", fontWeight: "600", cursor: "pointer", whiteSpace: "nowrap", minWidth: "80px", textAlign: "center", transition: "all 0.2s" },
-  challengeBtn: { background: "transparent", border: "1px solid #333", borderRadius: "10px", padding: "8px 14px", fontFamily: "'DM Sans',sans-serif", fontSize: "12px", color: "#888", cursor: "pointer", whiteSpace: "nowrap", minWidth: "80px", textAlign: "center" },
-};

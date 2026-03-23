@@ -1,71 +1,77 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, FacebookAuthProvider } from "firebase/auth";
 import { getFirestore, doc, setDoc, getDoc, serverTimestamp, updateDoc } from "firebase/firestore";
-import { getMessaging, getToken, onMessage } from "firebase/messaging";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyBMajR3LpxZhR0KUm9XeT-ZJa_ePqywZEM",
-  authDomain: "sweatdebt-3ef55.firebaseapp.com",
-  projectId: "sweatdebt-3ef55",
-  storageBucket: "sweatdebt-3ef55.firebasestorage.app",
-  messagingSenderId: "242841715698",
-  appId: "1:242841715698:web:3626e9d81621f36b06216b",
-  measurementId: "G-SWJHVV2SY4"
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID,
 };
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const provider = new GoogleAuthProvider();
+export const facebookProvider = new FacebookAuthProvider();
 export const db = getFirestore(app);
 
-// Only init messaging in browser (not during SSR)
-export const messaging = typeof window !== "undefined" ? getMessaging(app) : null;
+// Check if username already taken
+export const isUsernameTaken = async (username) => {
+  const snap = await getDoc(doc(db, "usernames", username.toLowerCase()));
+  return snap.exists();
+};
 
-// Your VAPID key from Firebase Console → Project Settings → Cloud Messaging
-const VAPID_KEY = "YOUR_VAPID_KEY_HERE";
-
-export const saveUserProfile = async (user) => {
+// Save user profile on first login
+export const saveUserProfile = async (user, extraData = {}) => {
   const userRef = doc(db, "users", user.uid);
   const existing = await getDoc(userRef);
   if (!existing.exists()) {
-    const username = user.displayName?.toLowerCase().replace(/\s+/g,"") || user.email.split("@")[0];
+    const defaultUsername = (user.displayName?.toLowerCase().replace(/\s+/g,"") || user.email?.split("@")[0] || "user") + Math.floor(Math.random()*1000);
     await setDoc(userRef, {
       uid: user.uid,
-      displayName: user.displayName,
+      displayName: user.displayName || extraData.displayName || "",
       email: user.email,
-      username: username,
-      photoURL: user.photoURL || null,
+      username: extraData.username || defaultUsername,
+      photoURL: user.photoURL || extraData.photoURL || null,
       bio: "",
       createdAt: serverTimestamp(),
       honour: 100,
       wins: 0,
       losses: 0,
       fcmToken: null,
+      needsOnboarding: true,
+      ...extraData,
     });
+    const uname = extraData.username || defaultUsername;
+    await setDoc(doc(db, "usernames", uname.toLowerCase()), { uid: user.uid });
+    return { isNew: true, needsOnboarding: true };
+  } else {
+    await updateDoc(userRef, { lastSeen: serverTimestamp() });
+    return { isNew: false, needsOnboarding: existing.data().needsOnboarding || false };
   }
 };
 
-// Request notification permission and save FCM token
-export const requestNotificationPermission = async (userId) => {
-  if (!messaging) return null;
+// Called after onboarding completes
+export const completeOnboarding = async (uid, { displayName, username, photoURL, bio }) => {
+  await updateDoc(doc(db, "users", uid), {
+    displayName,
+    username: username.toLowerCase(),
+    photoURL: photoURL || null,
+    bio: bio || "",
+    needsOnboarding: false,
+    updatedAt: serverTimestamp(),
+  });
+  await setDoc(doc(db, "usernames", username.toLowerCase()), { uid });
+};
+
+// Send a notification to another user
+export const sendNotification = async ({ toUserId, fromUserId, fromName, fromPhoto, type, message, link }) => {
   try {
-    const permission = await Notification.requestPermission();
-    if (permission !== "granted") return null;
-
-    const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-    if (token) {
-      await updateDoc(doc(db, "users", userId), { fcmToken: token });
-      console.log("FCM token saved");
-    }
-    return token;
-  } catch (error) {
-    console.error("FCM error:", error);
-    return null;
-  }
-};
-
-// Listen for foreground messages
-export const onForegroundMessage = (callback) => {
-  if (!messaging) return;
-  return onMessage(messaging, callback);
+    await setDoc(doc(db, "notifications", `${toUserId}_${type}_${fromUserId}_${Date.now()}`), {
+      toUserId, fromUserId, fromName, fromPhoto: fromPhoto || null,
+      type, message, link: link || null, read: false, createdAt: serverTimestamp(),
+    });
+  } catch (e) { console.error("sendNotification error:", e); }
 };
