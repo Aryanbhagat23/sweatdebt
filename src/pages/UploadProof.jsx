@@ -1,257 +1,225 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { db } from "../firebase";
-import { collection, addDoc, doc, updateDoc, serverTimestamp, getDoc } from "firebase/firestore";
-import T, { gradientText } from "../theme";
+import { doc, getDoc, collection, addDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import T from "../theme";
 
-const CLOUD_NAME   = "daf3vs5n6";
-const UPLOAD_PRESET = "jrmodcfe";
+const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/daf3vs5n6/video/upload";
+const UPLOAD_PRESET  = "jrmodcfe";
+
+const TRASH_TALKS = [
+  "easy win, buddy. Now get on the floor 😂",
+  "told you this would happen 😤",
+  "no excuses, start sweating! 🏋️",
+  "hope you stretched first 😅",
+  "time to pay the price champ 💪",
+  "this is what happens when you lose 🔥",
+];
 
 export default function UploadProof({ user }) {
-  const navigate   = useNavigate();
-  const { betId }  = useParams();
-  const fileRef    = useRef(null);
-  const cameraRef  = useRef(null);
+  const navigate = useNavigate();
+  const { betId } = useParams();
+  const fileRef   = useRef();
+  const cameraRef = useRef();
 
-  const [file,        setFile]        = useState(null);
-  const [preview,     setPreview]     = useState(null);
-  const [uploading,   setUploading]   = useState(false);
-  const [progress,    setProgress]    = useState(0);
-  const [error,       setError]       = useState("");
-  const [done,        setDone]        = useState(false);
+  const [bet,       setBet]       = useState(null);
+  const [loading,   setLoading]   = useState(true);
+  const [file,      setFile]      = useState(null);
+  const [preview,   setPreview]   = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [progress,  setProgress]  = useState(0);
+  const [done,      setDone]      = useState(false);
+  const [error,     setError]     = useState("");
+  const [trashTalk] = useState(() => TRASH_TALKS[Math.floor(Math.random() * TRASH_TALKS.length)]);
+  const [showCamera, setShowCamera] = useState(false);
+  const [stream,     setStream]     = useState(null);
 
-  const pickFile = src => {
-    if (src === "camera") cameraRef.current?.click();
-    else fileRef.current?.click();
+  useEffect(() => {
+    if (!betId) { setLoading(false); return; }
+    getDoc(doc(db, "bets", betId)).then(snap => {
+      if (snap.exists()) setBet({ id: snap.id, ...snap.data() });
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [betId]);
+
+  useEffect(() => () => { if (stream) stream.getTracks().forEach(t => t.stop()); }, [stream]);
+
+  const startCamera = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+      setStream(s); setShowCamera(true);
+      setTimeout(() => { if (cameraRef.current) cameraRef.current.srcObject = s; }, 100);
+    } catch { setError("Camera access denied. Use file upload instead."); }
   };
 
-  const handleFile = e => {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    if (!f.type.startsWith("video/")) { setError("Please select a video file"); return; }
-    if (f.size > 200 * 1024 * 1024) { setError("Video must be under 200MB"); return; }
-    setFile(f);
-    setError("");
-    const url = URL.createObjectURL(f);
-    setPreview(url);
+  const stopCamera = () => {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    setStream(null); setShowCamera(false);
+  };
+
+  const pickFile = e => {
+    const f = e.target.files[0]; if (!f) return;
+    if (f.size > 100 * 1024 * 1024) { setError("File too large (max 100MB)"); return; }
+    setFile(f); setPreview(URL.createObjectURL(f)); setError("");
   };
 
   const upload = async () => {
-    if (!file || !user) return;
-    setUploading(true);
-    setProgress(0);
-    setError("");
-
+    if (!file) { setError("Please choose a video first"); return; }
+    setUploading(true); setProgress(0); setError("");
     try {
-      // Upload to Cloudinary via fetch (no widget — instant, no lag)
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("upload_preset", UPLOAD_PRESET);
-      formData.append("resource_type", "video");
-
+      const fd = new FormData();
+      fd.append("file", file); fd.append("upload_preset", UPLOAD_PRESET);
       const xhr = new XMLHttpRequest();
-      xhr.upload.onprogress = e => {
-        if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 90));
-      };
-
-      const videoUrl = await new Promise((resolve, reject) => {
-        xhr.onload = () => {
-          if (xhr.status === 200) {
-            const res = JSON.parse(xhr.responseText);
-            resolve(res.secure_url);
-          } else {
-            reject(new Error("Upload failed"));
-          }
-        };
-        xhr.onerror = () => reject(new Error("Network error"));
-        xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/video/upload`);
-        xhr.send(formData);
+      xhr.upload.onprogress = e => { if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 85)); };
+      const result = await new Promise((res, rej) => {
+        xhr.open("POST", CLOUDINARY_URL);
+        xhr.onload = () => { if (xhr.status === 200) res(JSON.parse(xhr.responseText)); else rej(new Error("Upload failed")); };
+        xhr.onerror = () => rej(new Error("Network error"));
+        xhr.send(fd);
       });
-
-      setProgress(95);
-
-      // Get bet info for context
-      let betData = {};
-      if (betId && betId !== "general") {
-        const betSnap = await getDoc(doc(db, "bets", betId));
-        if (betSnap.exists()) betData = betSnap.data();
-      }
-
-      // Save video doc to Firestore
+      setProgress(90);
       await addDoc(collection(db, "videos"), {
-        videoUrl,
-        betId:           betId || "general",
-        uploadedBy:      user.uid,
-        uploadedByName:  user.displayName,
-        uploadedByEmail: user.email,
-        uploaderPhoto:   user.photoURL || null,
-        betCreatedBy:    betData.createdBy || null,
-        createdByEmail:  betData.createdByEmail || null,
-        opponentEmail:   betData.opponentEmail || null,
-        createdAt:       serverTimestamp(),
-        likes:           0,
-        comments:        0,
-        approved:        false,
-        disputed:        false,
+        url: result.secure_url, publicId: result.public_id,
+        uploadedBy: user.uid, uploaderName: user.displayName,
+        betId: betId || null,
+        bet: bet ? { description: bet.description, forfeit: bet.forfeit, reps: bet.reps } : null,
+        createdAt: serverTimestamp(), likes: [], comments: [],
       });
-
-      // Mark bet as video uploaded
-      if (betId && betId !== "general") {
-        await updateDoc(doc(db, "bets", betId), {
-          status:       "proof_uploaded",
-          proofUrl:     videoUrl,
-          uploadedAt:   serverTimestamp(),
-        });
-      }
-
-      setProgress(100);
-      setDone(true);
-    } catch (e) {
-      console.error(e);
-      setError("Upload failed — please check your connection and try again");
-      setProgress(0);
-    }
+      if (betId) await updateDoc(doc(db, "bets", betId), { proofUrl: result.secure_url, proofUploadedAt: serverTimestamp() });
+      setProgress(100); setDone(true);
+    } catch (e) { setError(e.message || "Upload failed"); }
     setUploading(false);
   };
 
+  if (loading) return (
+    <div style={{ minHeight: "100vh", background: T.bg0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+      <div style={{ width: "32px", height: "32px", borderRadius: "50%", border: `3px solid ${T.border}`, borderTop: `3px solid ${T.accent}`, animation: "spin 0.8s linear infinite" }} />
+    </div>
+  );
+
   if (done) return (
-    <div style={{ minHeight:"100vh", background:T.bg0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"40px 24px", textAlign:"center" }}>
-      <div style={{ fontSize:"72px", marginBottom:"16px" }}>🎉</div>
-      <div style={{ fontFamily:T.fontDisplay, fontSize:"40px", letterSpacing:"0.02em", marginBottom:"8px" }}>
-        <span style={gradientText}>Proof uploaded!</span>
+    <div style={{ minHeight: "100vh", background: T.bg0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px", textAlign: "center" }}>
+      <div style={{ fontSize: "72px", marginBottom: "16px" }}>🏆</div>
+      <div style={{ fontFamily: T.fontDisplay, fontSize: "40px", color: T.panel, letterSpacing: "0.02em", fontStyle: "italic", marginBottom: "8px" }}>
+        Debt <span style={{ color: T.accent }}>Paid!</span>
       </div>
-      <div style={{ fontFamily:T.fontBody, fontSize:"16px", color:T.muted, marginBottom:"32px" }}>
-        Your forfeit video is live. Your opponent can now approve or dispute it.
-      </div>
-      <button style={{ background:T.gradPrimary, border:"none", borderRadius:T.r16, padding:"16px 32px", fontFamily:T.fontDisplay, fontSize:"22px", letterSpacing:"0.06em", color:"#fff", cursor:"pointer", marginBottom:"12px", width:"100%", maxWidth:"320px" }}
-        onClick={() => navigate("/feed")}>
-        View in Feed 🎬
-      </button>
-      <button style={{ background:"transparent", border:`1px solid ${T.borderMid}`, borderRadius:T.r16, padding:"14px 32px", fontFamily:T.fontDisplay, fontSize:"20px", letterSpacing:"0.06em", color:T.white, cursor:"pointer", width:"100%", maxWidth:"320px" }}
-        onClick={() => navigate("/")}>
-        Back to Bets
-      </button>
+      <div style={{ fontFamily: T.fontBody, fontSize: "16px", color: T.textMuted, marginBottom: "28px" }}>Your proof has been posted to the feed 🔥</div>
+      <button onClick={() => navigate("/")} style={{ background: T.panel, border: "none", borderRadius: T.rFull, padding: "16px 32px", fontFamily: T.fontDisplay, fontSize: "22px", letterSpacing: "0.05em", color: T.accent, cursor: "pointer", boxShadow: T.shadowMd }}>Back to Bets</button>
     </div>
   );
 
   return (
-    <div style={{ minHeight:"100vh", background:T.bg0, paddingBottom:"40px" }}>
-      {/* Hidden file inputs — direct device access */}
-      <input
-        ref={fileRef}
-        type="file"
-        accept="video/*"
-        style={{ display:"none" }}
-        onChange={handleFile}
-      />
-      <input
-        ref={cameraRef}
-        type="file"
-        accept="video/*"
-        capture="environment"   /* opens rear camera directly */
-        style={{ display:"none" }}
-        onChange={handleFile}
-      />
+    <div style={{ minHeight: "100vh", background: T.bg0, paddingBottom: "40px" }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
 
       {/* Header */}
-      <div style={{ display:"flex", alignItems:"center", gap:"12px", padding:"52px 16px 24px" }}>
-        <button style={{ background:T.bg2, border:`1px solid ${T.border}`, borderRadius:"50%", width:"44px", height:"44px", color:T.white, fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}
-          onClick={() => navigate(-1)}>←</button>
-        <div style={{ fontFamily:T.fontDisplay, fontSize:"32px", color:T.white, letterSpacing:"0.02em" }}>
-          Upload <span style={gradientText}>Proof</span>
-        </div>
+      <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "52px 16px 20px" }}>
+        <button onClick={() => navigate(-1)} style={{ background: T.bg1, border: `1px solid ${T.border}`, borderRadius: "50%", width: "44px", height: "44px", color: T.panel, fontSize: "20px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: T.shadowSm }}>←</button>
+        <div style={{ fontFamily: T.fontDisplay, fontSize: "28px", color: T.panel, letterSpacing: "0.04em", fontStyle: "italic", flex: 1 }}>Pay <span style={{ color: T.accent }}>Debt</span></div>
       </div>
 
-      <div style={{ padding:"0 16px" }}>
-
-        {/* Video preview */}
-        {preview && (
-          <div style={{ borderRadius:T.r20, overflow:"hidden", marginBottom:"16px", aspectRatio:"9/16", maxHeight:"400px", background:T.bg2, position:"relative" }}>
-            <video src={preview} style={{ width:"100%", height:"100%", objectFit:"cover" }} controls playsInline />
-            {/* Remove button */}
-            <button style={{ position:"absolute", top:"12px", right:"12px", background:"rgba(0,0,0,0.7)", border:"none", borderRadius:"50%", width:"36px", height:"36px", color:T.white, fontSize:"18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}
-              onClick={() => { setFile(null); setPreview(null); setError(""); }}>✕</button>
-          </div>
-        )}
-
-        {/* Pick source buttons — shown when no file selected */}
-        {!file && (
-          <div style={{ display:"flex", flexDirection:"column", gap:"12px", marginBottom:"20px" }}>
-            <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:T.muted, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"4px" }}>
-              Select your forfeit video
+      <div style={{ padding: "0 16px" }}>
+        {/* ── DEBT DUE card ── */}
+        {bet && (
+          <div style={{ background: T.panel, borderRadius: T.r20, padding: "24px", marginBottom: "16px", textAlign: "center", boxShadow: "0 4px 20px rgba(5,46,22,0.2)" }}>
+            {/* DEBT DUE badge */}
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: T.orange, borderRadius: T.rFull, padding: "6px 16px", fontFamily: T.fontMono, fontSize: "12px", fontWeight: "800", color: "#fff", letterSpacing: "0.1em", marginBottom: "20px" }}>
+              ⚡ DEBT DUE
             </div>
 
-            {/* Camera — most important on mobile */}
-            <button style={{ background:T.pinkDim, border:`1px solid ${T.pinkBorder}`, borderRadius:T.r16, padding:"20px 16px", display:"flex", alignItems:"center", gap:"16px", cursor:"pointer" }}
-              onClick={() => pickFile("camera")}>
-              <span style={{ fontSize:"36px" }}>📷</span>
-              <div style={{ textAlign:"left" }}>
-                <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:T.pink, letterSpacing:"0.04em" }}>Record Now</div>
-                <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:T.muted, marginTop:"2px" }}>Opens your camera to record</div>
+            {/* Player avatars */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "6px" }}>
+              <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "#7c3aed", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.fontDisplay, fontSize: "20px", color: "#fff", border: `3px solid ${T.panel}`, zIndex: 2, position: "relative" }}>
+                {bet.createdByName?.charAt(0) || "K"}
               </div>
-            </button>
-
-            {/* Gallery */}
-            <button style={{ background:T.bg2, border:`1px solid ${T.border}`, borderRadius:T.r16, padding:"20px 16px", display:"flex", alignItems:"center", gap:"16px", cursor:"pointer" }}
-              onClick={() => pickFile("gallery")}>
-              <span style={{ fontSize:"36px" }}>🎞️</span>
-              <div style={{ textAlign:"left" }}>
-                <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:T.white, letterSpacing:"0.04em" }}>Choose from Gallery</div>
-                <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:T.muted, marginTop:"2px" }}>Pick an existing video from your phone</div>
+              <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: T.bg3, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.fontMono, fontSize: "12px", color: T.textMid, border: `3px solid ${T.panel}`, zIndex: 1, margin: "0 -6px", position: "relative" }}>W</div>
+              <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: T.accent, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.fontDisplay, fontSize: "20px", color: "#fff", border: `3px solid ${T.panel}`, zIndex: 2, position: "relative" }}>
+                {user?.displayName?.charAt(0) || "A"}
               </div>
-            </button>
-          </div>
-        )}
-
-        {/* Upload info */}
-        {!file && (
-          <div style={{ background:T.bg2, border:`1px solid ${T.border}`, borderRadius:T.r16, padding:"16px", marginBottom:"20px" }}>
-            <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:T.muted, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"10px" }}>Tips</div>
-            {["Keep it under 2 minutes for best results","Make sure your face is visible","Show yourself completing the full forfeit","Good lighting helps — don't record in the dark"].map(tip => (
-              <div key={tip} style={{ fontFamily:T.fontBody, fontSize:"13px", color:T.muted, lineHeight:"1.8" }}>💡 {tip}</div>
-            ))}
-          </div>
-        )}
-
-        {/* Error */}
-        {error && (
-          <div style={{ background:T.redDim, border:`1px solid ${T.redBorder}`, borderRadius:T.r12, padding:"12px 16px", fontFamily:T.fontBody, fontSize:"14px", color:T.red, marginBottom:"16px" }}>
-            {error}
-          </div>
-        )}
-
-        {/* Upload button — shown when file is selected */}
-        {file && !uploading && (
-          <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
-            <div style={{ fontFamily:T.fontBody, fontSize:"14px", color:T.muted, textAlign:"center" }}>
-              {file.name} · {(file.size / 1024 / 1024).toFixed(1)}MB
             </div>
-            <button style={{ background:T.gradPrimary, border:"none", borderRadius:T.r16, padding:"18px", fontFamily:T.fontDisplay, fontSize:"22px", letterSpacing:"0.06em", color:"#fff", cursor:"pointer" }}
-              onClick={upload}>
-              🚀 UPLOAD PROOF
-            </button>
-            <button style={{ background:"transparent", border:`1px solid ${T.borderMid}`, borderRadius:T.r16, padding:"14px", fontFamily:T.fontDisplay, fontSize:"18px", letterSpacing:"0.06em", color:T.muted, cursor:"pointer" }}
-              onClick={() => { setFile(null); setPreview(null); }}>
-              Choose Different Video
-            </button>
+            <div style={{ display: "flex", justifyContent: "center", gap: "52px", fontFamily: T.fontMono, fontSize: "11px", color: "rgba(255,255,255,0.45)", marginBottom: "20px" }}>
+              <span>{bet.createdByName?.split(" ")[0]}</span>
+              <span>You</span>
+            </div>
+
+            {/* TIME TO SWEAT */}
+            <div style={{ fontFamily: T.fontDisplay, fontSize: "clamp(30px,8vw,46px)", color: "#fff", letterSpacing: "0.02em", lineHeight: "1.05", fontStyle: "italic", marginBottom: "6px" }}>
+              TIME TO SWEAT,<br />NO EXCUSES.
+            </div>
+            <div style={{ fontFamily: T.fontBody, fontSize: "14px", color: "rgba(255,255,255,0.45)", marginBottom: "20px" }}>
+              {bet.description || `${bet.createdByName} won. You lost. Pay up.`}
+            </div>
+
+            {/* Exercise count */}
+            <div style={{ background: "rgba(255,255,255,0.07)", borderRadius: T.r16, padding: "20px", marginBottom: "16px" }}>
+              <div style={{ fontSize: "32px", marginBottom: "8px" }}>🏋️</div>
+              <div style={{ fontFamily: T.fontMono, fontSize: "11px", fontWeight: "700", color: "rgba(255,255,255,0.4)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "4px" }}>{bet.forfeit}</div>
+              <div style={{ fontFamily: T.fontDisplay, fontSize: "64px", color: T.accent, lineHeight: 1 }}>{bet.reps || "?"}</div>
+              <div style={{ fontFamily: T.fontBody, fontSize: "14px", color: "rgba(255,255,255,0.4)", marginTop: "4px" }}>reps owed</div>
+            </div>
+
+            {/* Trash talk */}
+            <div style={{ background: "rgba(239,68,68,0.1)", border: `1px solid rgba(239,68,68,0.2)`, borderRadius: T.r12, padding: "12px 16px", borderLeft: `3px solid ${T.red}`, textAlign: "left" }}>
+              <div style={{ fontFamily: T.fontBody, fontSize: "14px", color: "rgba(255,255,255,0.65)", fontStyle: "italic" }}>
+                "{bet.createdByName?.split(" ")[0]} says: {trashTalk}"
+              </div>
+            </div>
           </div>
         )}
 
-        {/* Upload progress */}
+        {!bet && (
+          <div style={{ background: T.bg1, border: `1px solid ${T.borderCard}`, borderRadius: T.r16, padding: "16px", marginBottom: "16px", boxShadow: T.shadowCard }}>
+            <div style={{ fontFamily: T.fontMono, fontSize: "11px", fontWeight: "700", color: T.textMuted, letterSpacing: "0.1em", marginBottom: "4px" }}>FREE POST</div>
+            <div style={{ fontFamily: T.fontBody, fontSize: "14px", color: T.textMuted }}>Post any workout video to the feed</div>
+          </div>
+        )}
+
+        {/* Camera / file */}
+        {showCamera ? (
+          <div style={{ marginBottom: "16px" }}>
+            <video ref={cameraRef} autoPlay muted playsInline style={{ width: "100%", borderRadius: T.r16, background: T.panel, aspectRatio: "9/16", objectFit: "cover" }} />
+            <button onClick={stopCamera} style={{ width: "100%", marginTop: "10px", background: "transparent", border: `1.5px solid ${T.borderMid}`, borderRadius: T.r16, padding: "14px", fontFamily: T.fontDisplay, fontSize: "18px", color: T.textMuted, cursor: "pointer" }}>Cancel Camera</button>
+          </div>
+        ) : preview ? (
+          <div style={{ marginBottom: "16px", position: "relative" }}>
+            <video src={preview} controls style={{ width: "100%", borderRadius: T.r16, background: T.panel, maxHeight: "320px", objectFit: "contain" }} />
+            <button onClick={() => { setFile(null); setPreview(null); }} style={{ position: "absolute", top: "10px", right: "10px", background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: "32px", height: "32px", color: "#fff", fontSize: "16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
+            <button onClick={startCamera} style={{ background: T.panel, border: "none", borderRadius: T.r16, padding: "20px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", cursor: "pointer", boxShadow: T.shadowMd }}>
+              <span style={{ fontSize: "28px" }}>📸</span>
+              <span style={{ fontFamily: T.fontDisplay, fontSize: "16px", color: T.accent, letterSpacing: "0.04em" }}>Record Now</span>
+            </button>
+            <button onClick={() => fileRef.current?.click()} style={{ background: T.bg1, border: `1.5px solid ${T.borderMid}`, borderRadius: T.r16, padding: "20px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", cursor: "pointer", boxShadow: T.shadowSm }}>
+              <span style={{ fontSize: "28px" }}>📁</span>
+              <span style={{ fontFamily: T.fontDisplay, fontSize: "16px", color: T.panel, letterSpacing: "0.04em" }}>Upload File</span>
+            </button>
+            <input ref={fileRef} type="file" accept="video/*" style={{ display: "none" }} onChange={pickFile} />
+          </div>
+        )}
+
         {uploading && (
-          <div style={{ background:T.bg2, border:`1px solid ${T.border}`, borderRadius:T.r16, padding:"24px" }}>
-            <div style={{ fontFamily:T.fontDisplay, fontSize:"28px", color:T.white, letterSpacing:"0.04em", marginBottom:"16px", textAlign:"center" }}>
-              {progress < 90 ? "Uploading..." : "Almost done..."}
+          <div style={{ background: T.bg1, border: `1px solid ${T.borderCard}`, borderRadius: T.r16, padding: "16px", marginBottom: "16px", boxShadow: T.shadowCard }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
+              <div style={{ fontFamily: T.fontMono, fontSize: "12px", color: T.textMuted }}>Uploading proof...</div>
+              <div style={{ fontFamily: T.fontDisplay, fontSize: "20px", color: T.accent }}>{progress}%</div>
             </div>
-            <div style={{ height:"8px", background:T.bg3, borderRadius:"4px", overflow:"hidden", marginBottom:"12px" }}>
-              <div style={{ height:"100%", width:`${progress}%`, background:T.gradPrimary, borderRadius:"4px", transition:"width 0.3s ease" }} />
-            </div>
-            <div style={{ fontFamily:T.fontMono, fontSize:"14px", color:T.pink, textAlign:"center" }}>{progress}%</div>
-            <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:T.muted, textAlign:"center", marginTop:"8px" }}>
-              Don't close the app while uploading
+            <div style={{ height: "6px", background: T.bg3, borderRadius: "3px", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${progress}%`, background: T.accent, borderRadius: "3px", transition: "width 0.3s ease" }} />
             </div>
           </div>
         )}
+
+        {error && <div style={{ background: T.redLight, border: `1px solid ${T.redBorder}`, borderRadius: T.r12, padding: "12px 16px", fontFamily: T.fontBody, fontSize: "14px", color: T.red, marginBottom: "12px" }}>{error}</div>}
+
+        <button onClick={upload} disabled={uploading || !file} style={{ width: "100%", background: file ? T.panel : T.bg3, border: "none", borderRadius: T.r16, padding: "18px 24px", fontFamily: T.fontDisplay, fontSize: "22px", letterSpacing: "0.06em", color: file ? T.accent : T.textMuted, cursor: file ? "pointer" : "default", boxShadow: file ? "0 4px 20px rgba(5,46,22,0.2)" : "none", marginBottom: "10px", transition: "all 0.2s" }}>
+          {uploading ? "Uploading..." : "START SWEATING →"}
+        </button>
+        <div style={{ textAlign: "center", fontFamily: T.fontMono, fontSize: "11px", color: T.textMuted }}>
+          Optional: Record proof to flex on {bet?.createdByName?.split(" ")[0] || "them"}
+        </div>
       </div>
     </div>
   );

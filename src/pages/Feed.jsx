@@ -42,7 +42,7 @@ export default function Feed({ user, onBellClick }) {
   if (loading) return (
     <div style={{minHeight:"100vh",background:T.bg0,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{width:"40px",height:"40px",borderRadius:"50%",border:`3px solid ${T.bg3}`,borderTop:`3px solid ${T.pink}`,animation:"spin 0.8s linear infinite"}}/>
+      <div style={{width:"40px",height:"40px",borderRadius:"50%",border:`3px solid ${T.border}`,borderTop:`3px solid ${T.accent}`,animation:"spin 0.8s linear infinite"}}/>
     </div>
   );
 
@@ -52,9 +52,9 @@ export default function Feed({ user, onBellClick }) {
 
       {/* Tab bar */}
       <div style={{position:"fixed",top:0,left:"50%",transform:"translateX(-50%)",width:"100%",maxWidth:"480px",zIndex:100,paddingTop:"env(safe-area-inset-top,0)"}}>
-        <div style={{display:"flex",justifyContent:"center",gap:"24px",padding:"14px 20px 10px",background:"rgba(10,10,15,0.97)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)"}}>
+        <div style={{display:"flex",justifyContent:"center",gap:"24px",padding:"14px 20px 10px",background:"rgba(240,253,244,0.97)",backdropFilter:"blur(24px)",WebkitBackdropFilter:"blur(24px)",borderBottom:`1px solid ${T.border}`}}>
           {[{key:"forYou",label:"For You"},{key:"friends",label:"Friends"},{key:"trending",label:"🔥 Trending"}].map(t=>(
-            <div key={t.key} style={{fontFamily:T.fontBody,fontSize:"15px",fontWeight:"600",color:tab===t.key?T.white:"rgba(255,255,255,0.3)",cursor:"pointer",borderBottom:tab===t.key?`2px solid ${T.pink}`:"2px solid transparent",paddingBottom:"4px",transition:"all 0.2s"}}
+            <div key={t.key} style={{fontFamily:T.fontBody,fontSize:"15px",fontWeight:"600",color:tab===t.key?T.panel:"rgba(5,46,22,0.4)",cursor:"pointer",borderBottom:tab===t.key?`2px solid ${T.accent}`:"2px solid transparent",paddingBottom:"4px",transition:"all 0.2s"}}
               onClick={()=>setTab(t.key)}>{t.label}</div>
           ))}
         </div>
@@ -66,10 +66,10 @@ export default function Feed({ user, onBellClick }) {
       {vids.length===0 ? (
         <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:"16px",padding:"24px"}}>
           <div style={{fontSize:"64px"}}>{tab==="friends"?"👥":"🎥"}</div>
-          <div style={{fontFamily:T.fontDisplay,fontSize:"26px",color:T.muted,letterSpacing:"0.04em",textAlign:"center"}}>
+          <div style={{fontFamily:T.fontDisplay,fontSize:"26px",color:T.textMuted,letterSpacing:"0.04em",textAlign:"center",fontStyle:"italic"}}>
             {tab==="friends"?"No friend videos yet":tab==="trending"?"Nothing trending yet":"No forfeits yet"}
           </div>
-          {tab==="friends"&&<button style={{background:T.pinkDim,border:`1px solid ${T.pinkBorder}`,borderRadius:T.r16,padding:"12px 20px",cursor:"pointer",fontFamily:T.fontDisplay,fontSize:"18px",color:T.pink,letterSpacing:"0.04em"}} onClick={()=>navigate("/friends")}>🔍 FIND FRIENDS</button>}
+          {tab==="friends"&&<button style={{background:T.panel,border:"none",borderRadius:T.r16,padding:"12px 20px",cursor:"pointer",fontFamily:T.fontDisplay,fontSize:"18px",color:T.accent,letterSpacing:"0.04em"}} onClick={()=>navigate("/friends")}>🔍 FIND FRIENDS</button>}
         </div>
       ):(
         <ReelsFeed videos={vids} user={user} navigate={navigate} onBadge={setNewBadge}/>
@@ -83,7 +83,7 @@ function ReelsFeed({videos,user,navigate,onBadge}){
   const containerRef=useRef(null);
   const idxRef=useRef(0); idxRef.current=idx;
   const totalRef=useRef(0); totalRef.current=videos.length;
-  // No commentsOpen state here at all — panel uses z-index to cover everything
+  // NO commentsOpen state — panel uses z-index 4000+ to cover everything
   const touch=useRef({y:0,x:0,time:0,dir:null,active:false});
   const lastSwipe=useRef(0);
 
@@ -145,8 +145,9 @@ function ReelsFeed({videos,user,navigate,onBadge}){
       {videos.map((v,i)=>(
         <ReelCard key={v.id} video={v} user={user} isActive={i===idx} offset={i-idx} navigate={navigate} onBadge={onBadge}/>
       ))}
+      {/* Dot nav */}
       <div style={{position:"fixed",right:"8px",top:"50%",transform:"translateY(-50%)",display:"flex",flexDirection:"column",gap:"5px",zIndex:50,pointerEvents:"none"}}>
-        {videos.slice(Math.max(0,idx-4),idx+5).map((_,i)=>{const a=Math.max(0,idx-4)+i;return <div key={a} style={{width:"3px",height:a===idx?"18px":"4px",borderRadius:"2px",background:a===idx?T.pink:"rgba(255,255,255,0.15)",transition:"all 0.3s"}}/>;} )}
+        {videos.slice(Math.max(0,idx-4),idx+5).map((_,i)=>{const a=Math.max(0,idx-4)+i;return <div key={a} style={{width:"3px",height:a===idx?"18px":"4px",borderRadius:"2px",background:a===idx?T.accent:"rgba(5,46,22,0.15)",transition:"all 0.3s"}}/>;} )}
       </div>
     </div>
   );
@@ -198,23 +199,23 @@ function ReelCard({video,user,isActive,offset,navigate,onBadge}){
   const timeAgo=ts=>{if(!ts?.toDate)return"just now";const s=Math.floor((new Date()-ts.toDate())/1000);if(s<60)return"just now";if(s<3600)return`${Math.floor(s/60)}m`;if(s<86400)return`${Math.floor(s/3600)}h`;return`${Math.floor(s/86400)}d`;};
 
   return(
-    <div style={{position:"absolute",inset:0,transform:`translateY(${offset*100}%)`,transition:"transform 0.4s cubic-bezier(0.25,0.46,0.45,0.94)",background:T.bg0,overflow:"hidden",touchAction:"none"}}>
-      <video ref={vRef} src={video.videoUrl} style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}} loop playsInline muted={muted} preload={isActive?"auto":"none"} onClick={()=>setMuted(!muted)}/>
-      <div style={{position:"absolute",inset:0,pointerEvents:"none",background:T.gradOverlay}}/>
+    <div style={{position:"absolute",inset:0,transform:`translateY(${offset*100}%)`,transition:"transform 0.4s cubic-bezier(0.25,0.46,0.45,0.94)",background:"#000",overflow:"hidden",touchAction:"none"}}>
+      <video ref={vRef} src={video.url||video.videoUrl} style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}} loop playsInline muted={muted} preload={isActive?"auto":"none"} onClick={()=>setMuted(!muted)}/>
+      {/* Gradient overlay */}
+      <div style={{position:"absolute",inset:0,pointerEvents:"none",background:"linear-gradient(to top,rgba(5,46,22,0.85) 0%,rgba(0,0,0,0.2) 50%,transparent 100%)"}}/>
 
       {/* Status badge */}
       <div style={{position:"absolute",top:"60px",left:"16px",zIndex:10}}>
-        {approved&&<div style={{background:T.greenDim,border:`1px solid ${T.greenBorder}`,color:T.green,padding:"4px 12px",borderRadius:T.rFull,fontFamily:T.fontMono,fontSize:"11px",fontWeight:"700"}}>APPROVED ✓</div>}
-        {disputed&&<div style={{background:T.redDim,border:`1px solid ${T.redBorder}`,color:T.red,padding:"4px 12px",borderRadius:T.rFull,fontFamily:T.fontMono,fontSize:"11px",fontWeight:"700"}}>DISPUTED ✗</div>}
-        {!approved&&!disputed&&<div style={{background:T.pinkDim,border:`1px solid ${T.pinkBorder}`,color:T.pink,padding:"4px 12px",borderRadius:T.rFull,fontFamily:T.fontMono,fontSize:"11px",fontWeight:"700"}}>FORFEIT 💀</div>}
+        {approved&&<div style={{background:T.greenLight,border:`1px solid ${T.greenBorder}`,color:T.green,padding:"4px 12px",borderRadius:T.rFull,fontFamily:T.fontMono,fontSize:"11px",fontWeight:"700"}}>APPROVED ✓</div>}
+        {disputed&&<div style={{background:T.redLight,border:`1px solid ${T.redBorder}`,color:T.red,padding:"4px 12px",borderRadius:T.rFull,fontFamily:T.fontMono,fontSize:"11px",fontWeight:"700"}}>DISPUTED ✗</div>}
+        {!approved&&!disputed&&<div style={{background:T.accentLight,border:`1px solid ${T.accentBorder}`,color:T.accent,padding:"4px 12px",borderRadius:T.rFull,fontFamily:T.fontMono,fontSize:"11px",fontWeight:"700"}}>⚡ DEBT PAID</div>}
       </div>
       {muted&&<div style={{position:"absolute",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"rgba(0,0,0,0.6)",borderRadius:"50%",width:"60px",height:"60px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"28px",pointerEvents:"none"}}>🔇</div>}
 
       {/*
-        ICONS — zIndex 10, ALWAYS visible, NEVER hidden by React state.
-        The CommentsPanel backdrop uses zIndex 4000 which covers these icons
-        completely when open. When panel closes, icons are just there already.
-        No state toggle = no Android partial re-render bug.
+        ICONS — zIndex 10, ALWAYS in DOM, NEVER hidden by React state.
+        CommentsPanel backdrop uses zIndex 4000 which covers these when open.
+        When panel closes, icons are just there already — no re-render bug.
       */}
       <div style={{position:"absolute",right:"12px",bottom:"100px",display:"flex",flexDirection:"column",gap:"20px",alignItems:"center",zIndex:10}}>
         {[
@@ -224,36 +225,41 @@ function ReelCard({video,user,isActive,offset,navigate,onBadge}){
           {icon:"⚔️",            label:"Bet",         fn:()=>navigate("/create")},
         ].map((btn,i)=>(
           <div key={i} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:"4px",cursor:"pointer"}} onClick={btn.fn}>
-            <div style={{fontSize:"28px"}}>{btn.icon}</div>
-            {btn.count!==undefined&&<div style={{fontFamily:T.fontMono,fontSize:"12px",color:T.white,fontWeight:"500"}}>{btn.count}</div>}
+            <div style={{width:"44px",height:"44px",borderRadius:"50%",background:"rgba(255,255,255,0.15)",backdropFilter:"blur(10px)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",border:"1px solid rgba(255,255,255,0.2)"}}>{btn.icon}</div>
+            {btn.count!==undefined&&<div style={{fontFamily:T.fontMono,fontSize:"12px",color:"#fff",fontWeight:"500"}}>{btn.count}</div>}
             {btn.label&&<div style={{fontFamily:T.fontMono,fontSize:"11px",color:"rgba(255,255,255,0.6)"}}>{btn.label}</div>}
           </div>
         ))}
       </div>
 
-      {/* Bottom info — ALWAYS visible, covered by panel z-index when open */}
+      {/* Bottom info — ALWAYS visible, covered by panel zIndex when open */}
       <div style={{position:"absolute",bottom:0,left:0,right:"60px",padding:"0 16px 90px",zIndex:10}}>
+        {video.bet?.forfeit && (
+          <div style={{display:"inline-flex",alignItems:"center",gap:"5px",background:T.accent,borderRadius:T.rFull,padding:"3px 10px",marginBottom:"8px"}}>
+            <span style={{fontFamily:T.fontMono,fontSize:"10px",fontWeight:"800",color:"#fff",letterSpacing:"0.06em"}}>⚡ DEBT PAID</span>
+          </div>
+        )}
         <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"10px",cursor:"pointer"}} onClick={()=>navigate(`/profile/${video.uploadedBy}`)}>
           {video.uploaderPhoto
-            ?<img src={video.uploaderPhoto} alt="" style={{width:"42px",height:"42px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${T.pink}`,flexShrink:0}}/>
-            :<div style={{width:"42px",height:"42px",borderRadius:"50%",background:T.gradPrimary,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontDisplay,fontSize:"18px",color:"#fff",flexShrink:0}}>{video.uploadedByName?.charAt(0)||"?"}</div>
+            ?<img src={video.uploaderPhoto} alt="" style={{width:"42px",height:"42px",borderRadius:"50%",objectFit:"cover",border:`2px solid ${T.accent}`,flexShrink:0}}/>
+            :<div style={{width:"42px",height:"42px",borderRadius:"50%",background:T.panel,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontDisplay,fontSize:"18px",color:T.accent,flexShrink:0}}>{video.uploadedByName?.charAt(0)||"?"}</div>
           }
           <div>
-            <div style={{fontFamily:T.fontBody,fontSize:"15px",fontWeight:"700",color:T.white}}>@{video.uploadedByName?.toLowerCase().replace(/\s/g,"")}</div>
-            <div style={{fontFamily:T.fontMono,fontSize:"11px",color:"rgba(255,255,255,0.4)"}}>{timeAgo(video.createdAt)}</div>
+            <div style={{fontFamily:T.fontBody,fontSize:"15px",fontWeight:"700",color:"#fff"}}>@{video.uploadedByName?.toLowerCase().replace(/\s/g,"")}</div>
+            <div style={{fontFamily:T.fontMono,fontSize:"11px",color:"rgba(255,255,255,0.5)"}}>{timeAgo(video.createdAt)}</div>
           </div>
         </div>
         {canVerdict&&(
-          <div style={{background:"rgba(10,10,15,0.9)",border:`1px solid ${T.border}`,borderRadius:T.r16,padding:"12px",marginBottom:"10px",backdropFilter:"blur(8px)"}}>
-            <div style={{fontFamily:T.fontBody,fontSize:"12px",color:T.muted,marginBottom:"8px",textAlign:"center"}}>Did they complete the forfeit?</div>
+          <div style={{background:"rgba(240,253,244,0.95)",border:`1px solid ${T.accentBorder}`,borderRadius:T.r16,padding:"12px",marginBottom:"10px",backdropFilter:"blur(8px)"}}>
+            <div style={{fontFamily:T.fontBody,fontSize:"12px",color:T.textMuted,marginBottom:"8px",textAlign:"center"}}>Did they complete the forfeit?</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px"}}>
-              <button style={{background:T.greenDim,border:`1px solid ${T.greenBorder}`,borderRadius:T.r12,padding:"12px",fontFamily:T.fontDisplay,fontSize:"18px",letterSpacing:"0.06em",color:T.green,cursor:"pointer",opacity:approving?0.5:1}} onClick={handleApprove} disabled={approving}>✓ APPROVE</button>
-              <button style={{background:T.redDim,border:`1px solid ${T.redBorder}`,borderRadius:T.r12,padding:"12px",fontFamily:T.fontDisplay,fontSize:"18px",letterSpacing:"0.06em",color:T.red,cursor:"pointer",opacity:approving?0.5:1}} onClick={handleDispute} disabled={approving}>✗ DISPUTE</button>
+              <button style={{background:T.greenLight,border:`1px solid ${T.greenBorder}`,borderRadius:T.r12,padding:"12px",fontFamily:T.fontDisplay,fontSize:"18px",letterSpacing:"0.06em",color:T.green,cursor:"pointer",opacity:approving?0.5:1}} onClick={handleApprove} disabled={approving}>✓ APPROVE</button>
+              <button style={{background:T.redLight,border:`1px solid ${T.redBorder}`,borderRadius:T.r12,padding:"12px",fontFamily:T.fontDisplay,fontSize:"18px",letterSpacing:"0.06em",color:T.red,cursor:"pointer",opacity:approving?0.5:1}} onClick={handleDispute} disabled={approving}>✗ DISPUTE</button>
             </div>
           </div>
         )}
-        {approved&&<div style={{background:T.greenDim,border:`1px solid ${T.greenBorder}`,borderRadius:T.r12,padding:"10px 14px",fontFamily:T.fontBody,fontSize:"13px",color:T.green,textAlign:"center",marginBottom:"10px"}}>✓ Forfeit approved! 🏆</div>}
-        {disputed&&<div style={{background:T.redDim,border:`1px solid ${T.redBorder}`,borderRadius:T.r12,padding:"10px 14px",fontFamily:T.fontBody,fontSize:"13px",color:T.red,textAlign:"center",marginBottom:"10px"}}>⚠ Disputed — honour dropped</div>}
+        {approved&&<div style={{background:T.greenLight,border:`1px solid ${T.greenBorder}`,borderRadius:T.r12,padding:"10px 14px",fontFamily:T.fontBody,fontSize:"13px",color:T.green,textAlign:"center",marginBottom:"10px"}}>✓ Forfeit approved! 🏆</div>}
+        {disputed&&<div style={{background:T.redLight,border:`1px solid ${T.redBorder}`,borderRadius:T.r12,padding:"10px 14px",fontFamily:T.fontBody,fontSize:"13px",color:T.red,textAlign:"center",marginBottom:"10px"}}>⚠ Disputed — honour dropped</div>}
       </div>
 
       {/* Comments panel */}

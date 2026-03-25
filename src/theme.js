@@ -1,163 +1,96 @@
-// src/theme.js
-// ═══════════════════════════════════════════════════════════════
-// SWEATDEBT — MIDNIGHT NEON DESIGN SYSTEM
-// Single source of truth. Import this everywhere instead of
-// hardcoding hex values. Change here → whole app updates.
-// ═══════════════════════════════════════════════════════════════
+// src/theme.js — SweatDebt MINT CHALKBOARD LIGHT
+// Mint-tinted white #f0fdf4 bg · White cards · Deep forest #052e16 panels · Emerald #10b981 accent
 
-export const T = {
-  // ── Backgrounds ───────────────────────────────────────────────
-  bg0:   "#0a0a0f",   // deepest black — page background
-  bg1:   "#111118",   // card background
-  bg2:   "#18181f",   // elevated card
-  bg3:   "#1f1f28",   // input / chip background
-  bg4:   "#26262f",   // hover state
+const T = {
+  bg0:   "#f0fdf4",
+  bg1:   "#ffffff",
+  bg2:   "#f0fdf4",
+  bg3:   "#dcfce7",
+  panel: "#052e16",
 
-  // ── Text ──────────────────────────────────────────────────────
-  white: "#ffffff",   // primary text
-  offWhite: "#f0eeff", // slightly warm white
-  muted: "#6b6b80",   // secondary text
-  dim:   "#3d3d50",   // tertiary / disabled
+  textDark:  "#052e16",
+  textMid:   "#166534",
+  textMuted: "#6b7280",
+  textLight: "#ffffff",
+  textFaded: "rgba(255,255,255,0.45)",
 
-  // ── Brand accents ─────────────────────────────────────────────
-  pink:    "#ff2d55",   // primary CTA — hot pink
-  pinkDim: "rgba(255,45,85,0.12)",
-  pinkBorder: "rgba(255,45,85,0.35)",
+  accent:       "#10b981",
+  accentLight:  "#d1fae5",
+  accentBorder: "rgba(16,185,129,0.45)",
+  accentDark:   "#059669",
 
-  orange:    "#ff9f0a",   // secondary accent — fire orange
-  orangeDim: "rgba(255,159,10,0.12)",
-  orangeBorder: "rgba(255,159,10,0.35)",
+  // orange aliases so old code still works
+  orange:       "#10b981",
+  orangeLight:  "#d1fae5",
+  orangeBorder: "rgba(16,185,129,0.45)",
+  orangeDark:   "#059669",
 
-  // ── Semantic colours ──────────────────────────────────────────
-  green:    "#30d158",   // success / win
-  greenDim: "rgba(48,209,88,0.12)",
-  greenBorder: "rgba(48,209,88,0.35)",
+  green:        "#10b981",
+  greenLight:   "#d1fae5",
+  greenBorder:  "rgba(16,185,129,0.4)",
 
-  red:    "#ff453a",   // error / danger / loss
-  redDim: "rgba(255,69,58,0.12)",
-  redBorder: "rgba(255,69,58,0.35)",
+  red:          "#ef4444",
+  redLight:     "#fee2e2",
+  redBorder:    "rgba(239,68,68,0.4)",
 
-  yellow:    "#ffd60a",   // warning / pending
-  yellowDim: "rgba(255,214,10,0.12)",
-  yellowBorder: "rgba(255,214,10,0.35)",
+  yellow:       "#f59e0b",
+  yellowLight:  "#fef3c7",
+  yellowBorder: "rgba(245,158,11,0.4)",
 
-  blue:    "#0a84ff",   // info
-  blueDim: "rgba(10,132,255,0.12)",
+  border:       "rgba(5,46,22,0.1)",
+  borderMid:    "rgba(5,46,22,0.18)",
+  borderCard:   "rgba(5,46,22,0.07)",
+  borderOrange: "rgba(16,185,129,0.4)",
 
-  // ── Borders ───────────────────────────────────────────────────
-  border:    "rgba(255,255,255,0.07)",   // default subtle border
-  borderMid: "rgba(255,255,255,0.13)",   // slightly visible
-  borderHot: "rgba(255,45,85,0.4)",      // pink glow border
+  fontDisplay: "'Bebas Neue','Arial Black',sans-serif",
+  fontBody:    "'DM Sans','Inter',system-ui,sans-serif",
+  fontMono:    "'DM Mono','SF Mono',monospace",
 
-  // ── Gradients (as CSS strings) ────────────────────────────────
-  gradPrimary:  "linear-gradient(135deg,#ff2d55,#ff9f0a)",   // pink → orange (main CTA)
-  gradFire:     "linear-gradient(135deg,#ff9f0a,#ff2d55)",   // orange → pink
-  gradSubtle:   "linear-gradient(135deg,#1a1a2e,#16213e)",   // dark card
-  gradOverlay:  "linear-gradient(to top,rgba(10,10,15,0.98) 0%,rgba(10,10,15,0.3) 40%,transparent 65%,rgba(10,10,15,0.5) 100%)",
+  r8:"8px", r12:"12px", r14:"14px", r16:"16px",
+  r20:"20px", r24:"24px", rFull:"9999px",
 
-  // ── Typography ────────────────────────────────────────────────
-  fontDisplay: "'Bebas Neue', 'Arial Black', sans-serif",   // headings, numbers
-  fontBody:    "'DM Sans', 'Inter', system-ui, sans-serif",  // body text
-  fontMono:    "'DM Mono', 'SF Mono', monospace",            // labels, timestamps
+  shadowSm:  "0 2px 8px rgba(5,46,22,0.08)",
+  shadowMd:  "0 4px 16px rgba(5,46,22,0.10)",
+  shadowLg:  "0 8px 32px rgba(5,46,22,0.12)",
+  shadowCard:"0 2px 12px rgba(5,46,22,0.07)",
 
-  // ── Border radius ─────────────────────────────────────────────
-  r8:  "8px",
-  r12: "12px",
-  r16: "16px",
-  r20: "20px",
-  r24: "24px",
-  rFull: "9999px",
-
-  // ── Shadows / glows ───────────────────────────────────────────
-  glowPink:   "0 0 20px rgba(255,45,85,0.3)",
-  glowOrange: "0 0 20px rgba(255,159,10,0.3)",
-  glowGreen:  "0 0 12px rgba(48,209,88,0.3)",
-
-  // ── Status config (use statusStyle(status) helper) ────────────
-  status: {
-    pending:   { label:"PENDING",   color:"#ffd60a", bg:"rgba(255,214,10,0.1)",   border:"rgba(255,214,10,0.35)"  },
-    accepted:  { label:"ACTIVE",    color:"#ff9f0a", bg:"rgba(255,159,10,0.1)",   border:"rgba(255,159,10,0.35)"  },
-    lost:      { label:"LOST",      color:"#ff453a", bg:"rgba(255,69,58,0.1)",    border:"rgba(255,69,58,0.35)"   },
-    won:       { label:"WON",       color:"#30d158", bg:"rgba(48,209,88,0.1)",    border:"rgba(48,209,88,0.35)"   },
-    completed: { label:"DONE",      color:"#30d158", bg:"rgba(48,209,88,0.1)",    border:"rgba(48,209,88,0.35)"   },
-    disputed:  { label:"DISPUTED",  color:"#ff9f0a", bg:"rgba(255,159,10,0.1)",   border:"rgba(255,159,10,0.35)"  },
-    declined:  { label:"DECLINED",  color:"#6b6b80", bg:"rgba(107,107,128,0.1)", border:"rgba(107,107,128,0.3)"  },
+  status:{
+    pending:  {label:"PENDING",  color:"#f59e0b",bg:"#fef3c7",border:"rgba(245,158,11,0.4)"},
+    accepted: {label:"ACTIVE",   color:"#10b981",bg:"#d1fae5",border:"rgba(16,185,129,0.4)"},
+    lost:     {label:"LOST",     color:"#ef4444",bg:"#fee2e2",border:"rgba(239,68,68,0.4)"},
+    won:      {label:"WON",      color:"#10b981",bg:"#d1fae5",border:"rgba(16,185,129,0.4)"},
+    completed:{label:"DONE",     color:"#10b981",bg:"#d1fae5",border:"rgba(16,185,129,0.4)"},
+    disputed: {label:"DISPUTED", color:"#ef4444",bg:"#fee2e2",border:"rgba(239,68,68,0.4)"},
+    declined: {label:"DECLINED", color:"#6b7280",bg:"#f3f4f6",border:"rgba(107,114,128,0.3)"},
   },
 };
 
-// ── Helper: get status style by key ──────────────────────────────
-export const statusStyle = (key) => T.status[key] || T.status.pending;
-
-// ── Helper: gradient text style (for JSX inline styles) ──────────
-export const gradientText = {
-  background: T.gradPrimary,
-  WebkitBackgroundClip: "text",
-  WebkitTextFillColor: "transparent",
-  backgroundClip: "text",
-};
-
-// ── Helper: pill badge ────────────────────────────────────────────
-export const pillStyle = (color, bg, border) => ({
-  display: "inline-flex",
-  alignItems: "center",
-  gap: "5px",
-  background: bg,
-  border: `1px solid ${border}`,
-  borderRadius: T.rFull,
-  padding: "4px 10px",
-  fontFamily: T.fontMono,
-  fontSize: "11px",
-  fontWeight: "700",
-  color,
-  letterSpacing: "0.06em",
-});
-
-// ── Helper: card style ────────────────────────────────────────────
-export const cardStyle = (opts = {}) => ({
-  background: opts.elevated ? T.bg2 : T.bg1,
-  border: `1px solid ${opts.hot ? T.borderHot : T.border}`,
-  borderRadius: opts.radius || T.r20,
-  overflow: "hidden",
-  ...opts,
-});
-
-// ── Helper: primary button ────────────────────────────────────────
-export const btnPrimary = {
-  background: T.gradPrimary,
-  border: "none",
-  borderRadius: T.r16,
-  padding: "16px 24px",
-  fontFamily: T.fontDisplay,
-  fontSize: "22px",
-  letterSpacing: "0.06em",
-  color: "#fff",
-  cursor: "pointer",
-  width: "100%",
-  transition: "opacity 0.2s, transform 0.1s",
-};
-
-export const btnSecondary = {
-  background: "transparent",
-  border: `1px solid ${T.borderMid}`,
-  borderRadius: T.r16,
-  padding: "14px 24px",
-  fontFamily: T.fontDisplay,
-  fontSize: "20px",
-  letterSpacing: "0.06em",
-  color: T.white,
-  cursor: "pointer",
-  width: "100%",
-  transition: "all 0.2s",
-};
-
-export const btnGhost = {
-  background: "transparent",
-  border: "none",
-  padding: "10px 16px",
-  fontFamily: T.fontBody,
-  fontSize: "14px",
-  color: T.muted,
-  cursor: "pointer",
-};
-
 export default T;
+export const statusStyle = k => T.status[k] || T.status.pending;
+
+export const panelStyle = (radius = T.r16) => ({
+  background: T.panel, borderRadius: radius, overflow:"hidden",
+});
+export const cardStyle = (opts = {}) => ({
+  background: T.bg1, border:`1px solid ${T.borderCard}`,
+  borderRadius: opts.radius || T.r16, boxShadow: T.shadowCard, overflow:"hidden",
+});
+export const btnPrimary = {
+  background:T.panel, border:"none", borderRadius:T.r16,
+  padding:"15px 24px", fontFamily:T.fontDisplay, fontSize:"20px",
+  letterSpacing:"0.05em", color:T.accent, cursor:"pointer",
+  width:"100%", boxShadow:"0 4px 14px rgba(5,46,22,0.25)", transition:"all 0.15s",
+};
+export const btnAccent = {
+  background:T.accent, border:"none", borderRadius:T.r16,
+  padding:"15px 24px", fontFamily:T.fontDisplay, fontSize:"20px",
+  letterSpacing:"0.05em", color:"#fff", cursor:"pointer",
+  width:"100%", boxShadow:"0 4px 14px rgba(16,185,129,0.35)", transition:"all 0.15s",
+};
+export const btnNavy = btnPrimary;
+export const btnOutline = {
+  background:"transparent", border:`1.5px solid rgba(5,46,22,0.18)`,
+  borderRadius:T.r16, padding:"14px 24px", fontFamily:T.fontDisplay,
+  fontSize:"20px", letterSpacing:"0.05em", color:T.textDark,
+  cursor:"pointer", width:"100%", transition:"all 0.15s",
+};

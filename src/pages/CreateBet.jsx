@@ -2,184 +2,179 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { db } from "../firebase";
 import { collection, addDoc, serverTimestamp, getDocs } from "firebase/firestore";
+import T from "../theme";
 
-const C = {
-  bg0:"#070d1a", bg1:"#0d1629", bg2:"#111f38", bg3:"#172847",
-  white:"#e0f2fe", muted:"#64748b", dim:"#3d5a7a",
-  cyan:"#00d4ff", coral:"#ff6b4a", green:"#00e676",
-  red:"#ff4d6d", border1:"#1e3a5f", border2:"#2a4f7a",
-  purple:"#a855f7",
-};
-
-const QUICK_BETS = [
-  { label:"20 Push-ups",    forfeit:"Push-ups",    reps:20,  icon:"💪" },
-  { label:"10 Burpees",     forfeit:"Burpees",     reps:10,  icon:"🔥" },
-  { label:"50 Squats",      forfeit:"Squats",      reps:50,  icon:"🦵" },
-  { label:"1 Min Plank",    forfeit:"Plank",       reps:1,   icon:"⏱" },
-  { label:"30 Sit-ups",     forfeit:"Sit-ups",     reps:30,  icon:"🎯" },
-  { label:"100 Jump Jacks", forfeit:"Jumping Jacks", reps:100, icon:"⚡" },
+const SPORTS = [
+  { key:"cricket",    label:"Cricket",    emoji:"🏏" },
+  { key:"football",   label:"Football",   emoji:"⚽" },
+  { key:"gaming",     label:"Gaming",     emoji:"🎮" },
+  { key:"basketball", label:"Basketball", emoji:"🏀" },
+  { key:"custom",     label:"Custom",     emoji:"🎯" },
+  { key:"chess",      label:"Chess",      emoji:"♟️" },
 ];
 
-const DEADLINE_OPTIONS = [
-  { label:"24 hours",  hours:24  },
-  { label:"48 hours",  hours:48  },
-  { label:"72 hours",  hours:72  },
-  { label:"1 week",    hours:168 },
+const QUICK_FORFEITS = [
+  { label:"Push-ups",   emoji:"💪", reps:20 },
+  { label:"Squats",     emoji:"🦵", reps:50 },
+  { label:"Burpees",    emoji:"🔥", reps:10 },
+  { label:"Run 2km",    emoji:"🏃", reps:1  },
+  { label:"Sit-ups",    emoji:"🎯", reps:30 },
+  { label:"Plank 2min", emoji:"⏱", reps:1  },
+];
+
+const DEADLINES = [
+  { label:"24 hours", hours:24  },
+  { label:"48 hours", hours:48  },
+  { label:"72 hours", hours:72  },
+  { label:"1 week",   hours:168 },
 ];
 
 export default function CreateBet({ user }) {
-  const navigate = useNavigate();
-  const location = useLocation();
+  const navigate  = useNavigate();
+  const location  = useLocation();
   const prefilled = location.state?.opponent;
 
-  const [step, setStep] = useState(1);
-  const [betDesc, setBetDesc] = useState("");
-  const [forfeit, setForfeit] = useState("");
-  const [reps, setReps] = useState("");
-  const [opponentEmail, setOpponentEmail] = useState(prefilled?.email || "");
-  const [opponentName, setOpponentName] = useState(prefilled?.displayName || "");
-  const [deadlineHours, setDeadlineHours] = useState(48);
-  const [friends, setFriends] = useState([]);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const [step,          setStep]         = useState(1);
+  const [sport,         setSport]        = useState("");
+  const [betDesc,       setBetDesc]      = useState(location.state?.prefillDesc||"");
+  const [forfeit,       setForfeit]      = useState(location.state?.prefillForfeit||"");
+  const [reps,          setReps]         = useState("");
+  const [opponentEmail, setOpponentEmail]= useState(prefilled?.email||"");
+  const [opponentName,  setOpponentName] = useState(prefilled?.displayName||"");
+  const [deadlineHours, setDeadlineHours]= useState(48);
+  const [friends,       setFriends]      = useState([]);
+  const [submitting,    setSubmitting]   = useState(false);
+  const [error,         setError]        = useState("");
 
   useEffect(() => {
     if (!user) return;
-    getDocs(collection(db, "users", user.uid, "friends")).then(snap => {
-      setFriends(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    getDocs(collection(db,"users",user.uid,"friends")).then(snap => {
+      setFriends(snap.docs.map(d => ({ id:d.id, ...d.data() })));
     });
   }, [user]);
 
-  const pickQuick = (q) => {
-    setForfeit(q.forfeit);
-    setReps(String(q.reps));
-    setBetDesc(`I bet you can't do ${q.reps} ${q.forfeit}!`);
-    setStep(2);
-  };
+  const progress = (step / 3) * 100;
 
   const submit = async () => {
     if (!opponentEmail.trim()) { setError("Please enter your opponent's email"); return; }
-    if (!betDesc.trim()) { setError("Please describe the bet"); return; }
-    if (!forfeit.trim()) { setError("Please set a forfeit"); return; }
+    if (!betDesc.trim())       { setError("Please describe the bet");             return; }
+    if (!forfeit.trim())       { setError("Please set a forfeit");                return; }
     setSubmitting(true); setError("");
     try {
-      // Deadline = now + chosen hours
-      const deadlineDate = new Date(Date.now() + deadlineHours * 60 * 60 * 1000);
-
-      await addDoc(collection(db, "bets"), {
-        description: betDesc.trim(),
-        forfeit,
-        reps: reps ? parseInt(reps) : null,
+      const deadlineDate = new Date(Date.now() + deadlineHours * 3600000);
+      await addDoc(collection(db,"bets"), {
+        description: betDesc.trim(), forfeit, reps: reps ? parseInt(reps) : null,
         opponentEmail: opponentEmail.trim().toLowerCase(),
-        opponentName: opponentName || opponentEmail.split("@")[0],
-        createdBy: user.uid,
-        createdByName: user.displayName,
-        createdByEmail: user.email,
-        betCreatedBy: user.uid,
-        status: "pending",
-        deadline: deadlineDate, // ← saves as JS Date, Firestore converts to Timestamp
-        deadlineHours,
+        opponentName:  opponentName || opponentEmail.split("@")[0],
+        createdBy:     user.uid,  createdByName:  user.displayName,
+        createdByEmail:user.email, betCreatedBy:   user.uid,
+        sport: sport || "custom", status: "pending",
+        deadline: deadlineDate,   deadlineHours,
         createdAt: serverTimestamp(),
+        gameName: location.state?.gameName || null,
       });
       navigate("/");
-    } catch (e) {
-      console.error(e);
-      setError("Something went wrong. Please try again.");
-    }
+    } catch(e) { console.error(e); setError("Something went wrong."); }
     setSubmitting(false);
   };
 
-  const progress = (step / 3) * 100;
-
   return (
-    <div style={{ minHeight:"100vh", background:C.bg0, paddingBottom:"40px" }}>
+    <div style={{ minHeight:"100vh", background:T.bg0, paddingBottom:"40px" }}>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+
       {/* Header */}
       <div style={{ display:"flex", alignItems:"center", gap:"12px", padding:"52px 16px 20px" }}>
-        <button style={{ background:C.bg2, border:`1px solid ${C.border1}`, borderRadius:"50%", width:"44px", height:"44px", color:C.white, fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}
-          onClick={() => step > 1 ? setStep(s=>s-1) : navigate(-1)}>←</button>
-        <div style={{ flex:1 }}>
-          <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"28px", color:C.white, letterSpacing:"0.04em" }}>
-            New <span style={{ color:C.cyan }}>Bet</span>
-          </div>
-          <div style={{ height:"4px", background:C.bg2, borderRadius:"2px", marginTop:"6px", overflow:"hidden" }}>
-            <div style={{ height:"100%", width:`${progress}%`, background:`linear-gradient(90deg,${C.cyan},${C.purple})`, borderRadius:"2px", transition:"width 0.3s" }} />
-          </div>
-        </div>
-        <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"12px", color:C.muted }}>{step}/3</div>
+        <button onClick={() => step > 1 ? setStep(s => s-1) : navigate(-1)} style={{ background:T.bg1, border:`1px solid ${T.border}`, borderRadius:"50%", width:"44px", height:"44px", color:T.panel, fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:T.shadowSm }}>←</button>
+        <div style={{ fontFamily:T.fontDisplay, fontSize:"28px", color:T.panel, letterSpacing:"0.04em", fontStyle:"italic", flex:1 }}>New <span style={{ color:T.accent }}>Bet</span></div>
+        <div style={{ fontFamily:T.fontMono, fontSize:"12px", color:T.textMuted }}>{step}/3</div>
+      </div>
+
+      {/* Progress bar */}
+      <div style={{ height:"4px", background:T.border, margin:"0 16px 24px", borderRadius:"2px" }}>
+        <div style={{ height:"100%", width:`${progress}%`, background:T.accent, borderRadius:"2px", transition:"width 0.35s ease" }} />
       </div>
 
       <div style={{ padding:"0 16px" }}>
 
-        {/* Step 1 — Quick bets or custom */}
+        {/* ── STEP 1: Sport + forfeit ── */}
         {step === 1 && (
           <div>
-            <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"26px", color:C.white, letterSpacing:"0.03em", marginBottom:"6px" }}>Choose a forfeit</div>
-            <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:"14px", color:C.muted, marginBottom:"20px" }}>Quick pick or write your own</div>
-
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"16px" }}>
-              {QUICK_BETS.map(q => (
-                <div key={q.label} style={{ background:C.bg2, border:`1px solid ${C.border1}`, borderRadius:"16px", padding:"16px 14px", cursor:"pointer", transition:"all 0.15s" }}
-                  onClick={() => pickQuick(q)}>
-                  <div style={{ fontSize:"28px", marginBottom:"8px" }}>{q.icon}</div>
-                  <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:"14px", fontWeight:"600", color:C.white }}>{q.label}</div>
-                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"10px", color:C.muted, marginTop:"3px" }}>Quick pick</div>
+            <div style={{ fontFamily:T.fontMono, fontSize:"11px", fontWeight:"700", color:T.textMuted, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:"12px" }}>Pick a Sport / Game</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"10px", marginBottom:"20px" }}>
+              {SPORTS.map(s => (
+                <div key={s.key} style={{ background:sport===s.key?T.panel:T.bg1, border:`1.5px solid ${sport===s.key?T.accent:T.border}`, borderRadius:T.r16, padding:"16px 12px", textAlign:"center", cursor:"pointer", transition:"all 0.15s", boxShadow:T.shadowSm }} onClick={() => setSport(s.key)}>
+                  <div style={{ fontSize:"28px", marginBottom:"6px" }}>{s.emoji}</div>
+                  <div style={{ fontFamily:T.fontBody, fontSize:"13px", fontWeight:"600", color:sport===s.key?T.accent:T.panel }}>{s.label}</div>
                 </div>
               ))}
             </div>
 
-            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:C.muted, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"10px" }}>Or write your own</div>
+            <div style={{ fontFamily:T.fontMono, fontSize:"11px", fontWeight:"700", color:T.textMuted, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:"12px" }}>Loser Does...</div>
 
-            <div style={{ background:C.bg2, border:`1px solid ${C.border1}`, borderRadius:"16px", padding:"16px", marginBottom:"12px" }}>
-              <label style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:C.muted, letterSpacing:"0.08em", display:"block", marginBottom:"8px" }}>BET DESCRIPTION</label>
-              <textarea value={betDesc} onChange={e => setBetDesc(e.target.value)} placeholder="I bet you can't do 30 days of no junk food..." rows={3} maxLength={200}
-                style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:C.white, fontSize:"15px", fontFamily:"'DM Sans',sans-serif", resize:"none", lineHeight:"1.5" }} />
+            {/* Quick forfeits */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px", marginBottom:"12px" }}>
+              {QUICK_FORFEITS.map(f => (
+                <div key={f.label} style={{ background:forfeit===f.label?T.panel:T.bg1, border:`1.5px solid ${forfeit===f.label?T.accent:T.border}`, borderRadius:T.r14, padding:"12px 14px", display:"flex", alignItems:"center", gap:"10px", cursor:"pointer", transition:"all 0.15s", boxShadow:T.shadowSm }} onClick={() => { setForfeit(f.label); setReps(String(f.reps)); }}>
+                  <span style={{ fontSize:"22px" }}>{f.emoji}</span>
+                  <div>
+                    <div style={{ fontFamily:T.fontBody, fontSize:"14px", fontWeight:"600", color:forfeit===f.label?T.accent:T.panel }}>{f.label}</div>
+                    <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:T.textMuted }}>{f.reps} reps</div>
+                  </div>
+                </div>
+              ))}
             </div>
 
-            <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:"10px", marginBottom:"16px" }}>
-              <div style={{ background:C.bg2, border:`1px solid ${C.border1}`, borderRadius:"16px", padding:"14px 16px" }}>
-                <label style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:C.muted, letterSpacing:"0.08em", display:"block", marginBottom:"8px" }}>FORFEIT</label>
-                <input value={forfeit} onChange={e => setForfeit(e.target.value)} placeholder="e.g. Push-ups" style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:C.white, fontSize:"15px", fontFamily:"'DM Sans',sans-serif" }} />
+            {/* Custom + reps counter (like screenshot) */}
+            <div style={{ background:T.bg1, border:`1px solid ${T.borderCard}`, borderRadius:T.r16, padding:"14px", marginBottom:"12px", boxShadow:T.shadowSm }}>
+              <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:T.textMuted, letterSpacing:"0.08em", marginBottom:"8px" }}>CUSTOM FORFEIT</div>
+              <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"10px" }}>
+                <input value={forfeit} onChange={e => setForfeit(e.target.value)} placeholder="e.g. Push-ups" style={{ flex:1, background:T.bg2, border:`1px solid ${T.border}`, borderRadius:T.r12, padding:"12px 14px", color:T.textDark, fontSize:"15px", fontFamily:T.fontBody, outline:"none", caretColor:T.accent }} />
               </div>
-              <div style={{ background:C.bg2, border:`1px solid ${C.border1}`, borderRadius:"16px", padding:"14px 16px" }}>
-                <label style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:C.muted, letterSpacing:"0.08em", display:"block", marginBottom:"8px" }}>REPS</label>
-                <input value={reps} onChange={e => setReps(e.target.value)} placeholder="20" type="number" style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:C.white, fontSize:"15px", fontFamily:"'DM Mono',monospace" }} />
+              {/* Reps counter with +/- buttons like screenshot */}
+              <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
+                  <span style={{ fontSize:"20px" }}>💪</span>
+                  <span style={{ fontFamily:T.fontBody, fontSize:"15px", fontWeight:"600", color:T.panel }}>{forfeit||"Pushups"}</span>
+                </div>
+                <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:"8px" }}>
+                  <button onClick={() => setReps(r => String(Math.max(0,(parseInt(r)||0)-5)))} style={{ width:"32px", height:"32px", borderRadius:"50%", background:T.bg3, border:`1px solid ${T.border}`, fontFamily:T.fontDisplay, fontSize:"18px", color:T.panel, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>−</button>
+                  <span style={{ fontFamily:T.fontDisplay, fontSize:"24px", color:T.panel, minWidth:"36px", textAlign:"center" }}>{reps||"0"}</span>
+                  <button onClick={() => setReps(r => String((parseInt(r)||0)+5))} style={{ width:"32px", height:"32px", borderRadius:"50%", background:T.panel, border:"none", fontFamily:T.fontDisplay, fontSize:"18px", color:T.accent, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>+</button>
+                </div>
               </div>
             </div>
 
-            {error && <div style={{ background:"rgba(255,77,109,0.12)", border:"1px solid rgba(255,77,109,0.3)", borderRadius:"12px", padding:"12px", fontFamily:"'DM Sans',sans-serif", fontSize:"14px", color:C.red, marginBottom:"12px" }}>{error}</div>}
+            {/* Bet description */}
+            <div style={{ background:T.bg1, border:`1px solid ${T.borderCard}`, borderRadius:T.r16, padding:"14px", marginBottom:"16px", boxShadow:T.shadowSm }}>
+              <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:T.textMuted, letterSpacing:"0.08em", marginBottom:"8px" }}>BET DESCRIPTION</div>
+              <textarea value={betDesc} onChange={e => setBetDesc(e.target.value)} placeholder="India vs Aus · Whoever's team loses does 50 squats" rows={2} maxLength={200} style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:T.textDark, fontSize:"14px", fontFamily:T.fontBody, resize:"none", lineHeight:"1.5", caretColor:T.accent }} />
+            </div>
 
-            <button style={{ width:"100%", background:`linear-gradient(135deg,${C.cyan},${C.purple})`, border:"none", borderRadius:"16px", padding:"16px", fontFamily:"'Bebas Neue',sans-serif", fontSize:"22px", letterSpacing:"0.06em", color:"#000", cursor:"pointer", opacity: !forfeit.trim()||!betDesc.trim()?0.4:1 }}
-              disabled={!forfeit.trim()||!betDesc.trim()} onClick={() => { setError(""); setStep(2); }}>
-              Next →
-            </button>
+            <button style={{ width:"100%", background:T.panel, border:"none", borderRadius:T.r16, padding:"15px 24px", fontFamily:T.fontDisplay, fontSize:"20px", letterSpacing:"0.05em", color:T.accent, cursor:"pointer", boxShadow:"0 4px 14px rgba(5,46,22,0.2)", opacity:!forfeit.trim()||!betDesc.trim()?0.4:1 }} disabled={!forfeit.trim()||!betDesc.trim()} onClick={() => { setError(""); setStep(2); }}>Next →</button>
           </div>
         )}
 
-        {/* Step 2 — Choose opponent */}
+        {/* ── STEP 2: Opponent ── */}
         {step === 2 && (
           <div>
-            <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"26px", color:C.white, letterSpacing:"0.03em", marginBottom:"6px" }}>Who's the challenge?</div>
-            <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:"14px", color:C.muted, marginBottom:"20px" }}>Pick a friend or enter their email</div>
+            <div style={{ fontFamily:T.fontMono, fontSize:"11px", fontWeight:"700", color:T.textMuted, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:"12px" }}>Challenge</div>
 
-            {/* Friends list */}
             {friends.length > 0 && (
               <>
-                <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:C.muted, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"10px" }}>Your Friends</div>
+                <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:T.textMuted, marginBottom:"10px" }}>Your friends</div>
                 <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginBottom:"16px" }}>
                   {friends.map(f => {
-                    const selected = opponentEmail === (f.email || "");
+                    const sel = opponentEmail === (f.email||"");
                     return (
-                      <div key={f.id} style={{ display:"flex", alignItems:"center", gap:"12px", background: selected ? "rgba(0,212,255,0.1)" : C.bg2, border:`1px solid ${selected ? "rgba(0,212,255,0.4)" : C.border1}`, borderRadius:"16px", padding:"14px", cursor:"pointer", transition:"all 0.15s" }}
-                        onClick={() => { setOpponentEmail(f.email||""); setOpponentName(f.displayName||""); }}>
-                        {f.photoURL
-                          ? <img src={f.photoURL} alt="" style={{ width:"42px", height:"42px", borderRadius:"50%", objectFit:"cover", flexShrink:0 }} />
-                          : <div style={{ width:"42px", height:"42px", borderRadius:"50%", background:`linear-gradient(135deg,${C.cyan},${C.purple})`, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:"'Bebas Neue',sans-serif", fontSize:"16px", color:"#000", flexShrink:0 }}>{f.displayName?.charAt(0)||"?"}</div>
-                        }
-                        <div style={{ flex:1 }}>
-                          <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:"15px", fontWeight:"600", color: selected?C.cyan:C.white }}>{f.displayName}</div>
-                          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:C.muted }}>@{f.username||f.email}</div>
+                      <div key={f.id} style={{ display:"flex", alignItems:"center", gap:"12px", background:sel?T.panel:T.bg1, border:`1.5px solid ${sel?T.accent:T.border}`, borderRadius:T.r16, padding:"14px", cursor:"pointer", transition:"all 0.15s", boxShadow:T.shadowSm }} onClick={() => { setOpponentEmail(f.email||""); setOpponentName(f.displayName||""); }}>
+                        <div style={{ width:"40px", height:"40px", borderRadius:"50%", background:sel?"rgba(16,185,129,0.2)":T.bg3, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.fontDisplay, fontSize:"16px", color:sel?T.accent:T.panel, flexShrink:0, border:`2px solid ${sel?T.accent:T.border}` }}>
+                          {f.displayName?.charAt(0)||"?"}
                         </div>
-                        {selected && <div style={{ fontSize:"18px" }}>✓</div>}
+                        <div style={{ flex:1 }}>
+                          <div style={{ fontFamily:T.fontBody, fontSize:"15px", fontWeight:"600", color:sel?T.accent:T.panel }}>{f.displayName}</div>
+                          <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:T.textMuted }}>@{f.username||f.email}</div>
+                        </div>
+                        {sel && <div style={{ color:T.accent, fontSize:"20px" }}>✓</div>}
                       </div>
                     );
                   })}
@@ -187,59 +182,49 @@ export default function CreateBet({ user }) {
               </>
             )}
 
-            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:C.muted, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"10px" }}>Or enter email</div>
-            <div style={{ background:C.bg2, border:`1px solid ${C.border1}`, borderRadius:"16px", padding:"14px 16px", marginBottom:"16px" }}>
-              <input value={opponentEmail} onChange={e => setOpponentEmail(e.target.value)} placeholder="friend@example.com" type="email"
-                style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:C.white, fontSize:"15px", fontFamily:"'DM Sans',sans-serif" }} />
+            <div style={{ background:T.bg1, border:`1px solid ${T.borderCard}`, borderRadius:T.r16, padding:"14px", marginBottom:"16px", boxShadow:T.shadowSm }}>
+              <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:T.textMuted, letterSpacing:"0.08em", marginBottom:"8px" }}>OR ENTER EMAIL</div>
+              <input value={opponentEmail} onChange={e => setOpponentEmail(e.target.value)} placeholder="friend@example.com" type="email" style={{ width:"100%", background:T.bg2, border:`1px solid ${T.border}`, borderRadius:T.r12, padding:"12px 14px", color:T.textDark, fontSize:"15px", fontFamily:T.fontBody, outline:"none", caretColor:T.accent }} />
             </div>
 
-            {error && <div style={{ background:"rgba(255,77,109,0.12)", border:"1px solid rgba(255,77,109,0.3)", borderRadius:"12px", padding:"12px", fontFamily:"'DM Sans',sans-serif", fontSize:"14px", color:C.red, marginBottom:"12px" }}>{error}</div>}
-
-            <button style={{ width:"100%", background:`linear-gradient(135deg,${C.cyan},${C.purple})`, border:"none", borderRadius:"16px", padding:"16px", fontFamily:"'Bebas Neue',sans-serif", fontSize:"22px", letterSpacing:"0.06em", color:"#000", cursor:"pointer", opacity:!opponentEmail.trim()?0.4:1 }}
-              disabled={!opponentEmail.trim()} onClick={() => { setError(""); setStep(3); }}>
-              Next →
-            </button>
+            {error && <div style={{ background:T.redLight, border:`1px solid ${T.redBorder}`, borderRadius:T.r12, padding:"12px 16px", fontFamily:T.fontBody, fontSize:"14px", color:T.red, marginBottom:"12px" }}>{error}</div>}
+            <button style={{ width:"100%", background:T.panel, border:"none", borderRadius:T.r16, padding:"15px 24px", fontFamily:T.fontDisplay, fontSize:"20px", letterSpacing:"0.05em", color:T.accent, cursor:"pointer", boxShadow:"0 4px 14px rgba(5,46,22,0.2)", opacity:!opponentEmail.trim()?0.4:1 }} disabled={!opponentEmail.trim()} onClick={() => { setError(""); setStep(3); }}>Next →</button>
           </div>
         )}
 
-        {/* Step 3 — Set deadline + confirm */}
+        {/* ── STEP 3: Deadline + confirm ── */}
         {step === 3 && (
           <div>
-            <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"26px", color:C.white, letterSpacing:"0.03em", marginBottom:"6px" }}>Set the deadline</div>
-            <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:"14px", color:C.muted, marginBottom:"20px" }}>How long do they have to complete the forfeit?</div>
-
-            {/* Deadline picker */}
+            <div style={{ fontFamily:T.fontMono, fontSize:"11px", fontWeight:"700", color:T.textMuted, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:"12px" }}>Set Deadline</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"20px" }}>
-              {DEADLINE_OPTIONS.map(d => (
-                <div key={d.hours} style={{ background: deadlineHours===d.hours ? "rgba(0,212,255,0.12)" : C.bg2, border:`1px solid ${deadlineHours===d.hours ? "rgba(0,212,255,0.4)" : C.border1}`, borderRadius:"14px", padding:"16px", textAlign:"center", cursor:"pointer", transition:"all 0.15s" }}
-                  onClick={() => setDeadlineHours(d.hours)}>
-                  <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"22px", color: deadlineHours===d.hours ? C.cyan : C.white, letterSpacing:"0.03em" }}>{d.label}</div>
-                  {deadlineHours===d.hours && <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"10px", color:C.cyan, marginTop:"4px" }}>✓ Selected</div>}
+              {DEADLINES.map(d => (
+                <div key={d.hours} style={{ background:deadlineHours===d.hours?T.panel:T.bg1, border:`1.5px solid ${deadlineHours===d.hours?T.accent:T.border}`, borderRadius:T.r14, padding:"16px", textAlign:"center", cursor:"pointer", transition:"all 0.15s", boxShadow:T.shadowSm }} onClick={() => setDeadlineHours(d.hours)}>
+                  <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:deadlineHours===d.hours?T.accent:T.panel, letterSpacing:"0.03em" }}>{d.label}</div>
+                  {deadlineHours===d.hours && <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:T.accent, marginTop:"4px" }}>✓ Selected</div>}
                 </div>
               ))}
             </div>
 
             {/* Summary */}
-            <div style={{ background:C.bg2, border:`1px solid ${C.border1}`, borderRadius:"16px", padding:"16px", marginBottom:"16px" }}>
-              <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:C.muted, letterSpacing:"0.1em", marginBottom:"12px" }}>BET SUMMARY</div>
+            <div style={{ background:T.panel, borderRadius:T.r16, padding:"16px", marginBottom:"16px" }}>
+              <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:"rgba(255,255,255,0.4)", letterSpacing:"0.1em", marginBottom:"12px" }}>BET SUMMARY</div>
               {[
-                { label:"Bet",      val:`"${betDesc}"` },
-                { label:"Forfeit",  val:`${reps ? reps+"x " : ""}${forfeit}` },
-                { label:"Against",  val:opponentName || opponentEmail },
-                { label:"Deadline", val:`${DEADLINE_OPTIONS.find(d=>d.hours===deadlineHours)?.label} after acceptance` },
+                { label:"Sport",    val: SPORTS.find(s=>s.key===sport)?.label||"Custom" },
+                { label:"Bet",      val: `"${betDesc}"` },
+                { label:"Forfeit",  val: `${reps?reps+"x ":""}${forfeit}` },
+                { label:"Against",  val: opponentName||opponentEmail },
+                { label:"Deadline", val: `${DEADLINES.find(d=>d.hours===deadlineHours)?.label} after acceptance` },
               ].map(row => (
                 <div key={row.label} style={{ display:"flex", gap:"12px", marginBottom:"8px" }}>
-                  <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:C.muted, width:"70px", flexShrink:0 }}>{row.label}</div>
-                  <div style={{ fontFamily:"'DM Sans',sans-serif", fontSize:"13px", color:C.white, flex:1 }}>{row.val}</div>
+                  <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:"rgba(255,255,255,0.4)", width:"60px", flexShrink:0 }}>{row.label}</div>
+                  <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:"#fff", flex:1 }}>{row.val}</div>
                 </div>
               ))}
             </div>
 
-            {error && <div style={{ background:"rgba(255,77,109,0.12)", border:"1px solid rgba(255,77,109,0.3)", borderRadius:"12px", padding:"12px", fontFamily:"'DM Sans',sans-serif", fontSize:"14px", color:C.red, marginBottom:"12px" }}>{error}</div>}
-
-            <button style={{ width:"100%", background:`linear-gradient(135deg,${C.cyan},${C.purple})`, border:"none", borderRadius:"16px", padding:"18px", fontFamily:"'Bebas Neue',sans-serif", fontSize:"24px", letterSpacing:"0.06em", color:"#000", cursor:"pointer", opacity:submitting?0.5:1 }}
-              disabled={submitting} onClick={submit}>
-              {submitting ? "Sending..." : "⚔️ SEND CHALLENGE"}
+            {error && <div style={{ background:T.redLight, border:`1px solid ${T.redBorder}`, borderRadius:T.r12, padding:"12px 16px", fontFamily:T.fontBody, fontSize:"14px", color:T.red, marginBottom:"12px" }}>{error}</div>}
+            <button style={{ width:"100%", background:T.accent, border:"none", borderRadius:T.r16, padding:"16px 24px", fontFamily:T.fontDisplay, fontSize:"22px", letterSpacing:"0.06em", color:"#fff", cursor:"pointer", boxShadow:"0 4px 14px rgba(16,185,129,0.35)", opacity:submitting?0.5:1 }} disabled={submitting} onClick={submit}>
+              {submitting ? "Sending..." : "Send Challenge 🔥"}
             </button>
           </div>
         )}
