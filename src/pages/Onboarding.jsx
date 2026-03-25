@@ -1,8 +1,10 @@
 import React, { useState } from "react";
-import { db, storage } from "../firebase";
+import { db } from "../firebase";
 import { doc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import T from "../theme";
+
+const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/daf3vs5n6/image/upload";
+const UPLOAD_PRESET  = "jrmodcfe";
 
 const STEPS = [
   { title: "Your username",  sub: "Pick a unique @handle" },
@@ -29,20 +31,28 @@ export default function Onboarding({ user, onComplete }) {
       if (!/^[a-zA-Z0-9_]+$/.test(username)) { setError("Letters, numbers and _ only"); return; }
     }
     if (step < STEPS.length - 1) { setStep(s => s + 1); return; }
+
     // Final submit
     setLoading(true);
     try {
       let photoURL = user.photoURL || null;
+
+      // Upload photo to Cloudinary if selected
       if (photo) {
-        const r = ref(storage, `avatars/${user.uid}`);
-        await uploadBytes(r, photo);
-        photoURL = await getDownloadURL(r);
+        const fd = new FormData();
+        fd.append("file", photo);
+        fd.append("upload_preset", UPLOAD_PRESET);
+        const res  = await fetch(CLOUDINARY_URL, { method: "POST", body: fd });
+        const data = await res.json();
+        photoURL   = data.secure_url;
       }
+
       await updateDoc(doc(db, "users", user.uid), {
-        username: username.toLowerCase().trim(),
-        photoURL, sports,
+        username:           username.toLowerCase().trim(),
+        photoURL,
+        sports,
         onboardingComplete: true,
-        updatedAt: serverTimestamp(),
+        updatedAt:          serverTimestamp(),
       });
       await setDoc(doc(db, "usernames", username.toLowerCase().trim()), { uid: user.uid }, { merge: true });
       onComplete?.();
@@ -61,11 +71,13 @@ export default function Onboarding({ user, onComplete }) {
         </div>
       </div>
 
-      {/* Progress */}
+      {/* Progress bar */}
       <div style={{ height: "4px", background: T.border, borderRadius: "2px", marginBottom: "8px" }}>
         <div style={{ height: "100%", width: `${progress}%`, background: T.accent, borderRadius: "2px", transition: "width 0.35s ease" }} />
       </div>
-      <div style={{ fontFamily: T.fontMono, fontSize: "10px", color: T.textMuted, letterSpacing: "0.08em", marginBottom: "28px" }}>STEP {step + 1} OF {STEPS.length}</div>
+      <div style={{ fontFamily: T.fontMono, fontSize: "10px", color: T.textMuted, letterSpacing: "0.08em", marginBottom: "28px" }}>
+        STEP {step + 1} OF {STEPS.length}
+      </div>
 
       {/* Step header */}
       <div style={{ marginBottom: "24px" }}>
@@ -86,7 +98,9 @@ export default function Onboarding({ user, onComplete }) {
               style={{ flex: 1, background: "transparent", border: "none", padding: "16px 0", color: T.textDark, fontSize: "18px", fontFamily: T.fontBody, fontWeight: "600", outline: "none", caretColor: T.accent }}
             />
           </div>
-          <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.textMuted, marginTop: "8px", letterSpacing: "0.06em" }}>Letters, numbers, underscores. Min 3 chars.</div>
+          <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.textMuted, marginTop: "8px", letterSpacing: "0.06em" }}>
+            Letters, numbers, underscores. Min 3 chars.
+          </div>
         </div>
       )}
 
@@ -99,13 +113,18 @@ export default function Onboarding({ user, onComplete }) {
           >
             {preview
               ? <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <div style={{ textAlign: "center" }}><div style={{ fontSize: "40px" }}>📷</div><div style={{ fontFamily: T.fontMono, fontSize: "10px", color: T.textMuted, marginTop: "4px" }}>TAP</div></div>}
+              : <div style={{ textAlign: "center" }}><div style={{ fontSize: "40px" }}>📷</div><div style={{ fontFamily: T.fontMono, fontSize: "10px", color: T.textMuted, marginTop: "4px" }}>TAP</div></div>
+            }
           </div>
-          <input id="ob-photo" type="file" accept="image/*" style={{ display: "none" }} onChange={e => { const f = e.target.files[0]; if (f) { setPhoto(f); setPreview(URL.createObjectURL(f)); } }} />
-          <button onClick={() => document.getElementById("ob-photo")?.click()} style={{ background: "transparent", border: `1.5px solid ${T.borderMid}`, borderRadius: T.rFull, padding: "10px 22px", fontFamily: T.fontBody, fontSize: "14px", fontWeight: "600", color: T.panel, cursor: "pointer" }}>
+          <input id="ob-photo" type="file" accept="image/*" style={{ display: "none" }}
+            onChange={e => { const f = e.target.files[0]; if (f) { setPhoto(f); setPreview(URL.createObjectURL(f)); } }} />
+          <button onClick={() => document.getElementById("ob-photo")?.click()}
+            style={{ background: "transparent", border: `1.5px solid ${T.borderMid}`, borderRadius: T.rFull, padding: "10px 22px", fontFamily: T.fontBody, fontSize: "14px", fontWeight: "600", color: T.panel, cursor: "pointer" }}>
             {preview ? "Change photo" : "Choose photo"}
           </button>
-          <button onClick={next} style={{ background: "transparent", border: "none", fontFamily: T.fontBody, fontSize: "14px", color: T.textMuted, cursor: "pointer", padding: "6px" }}>Skip for now →</button>
+          <button onClick={next} style={{ background: "transparent", border: "none", fontFamily: T.fontBody, fontSize: "14px", color: T.textMuted, cursor: "pointer", padding: "6px" }}>
+            Skip for now →
+          </button>
         </div>
       )}
 
@@ -115,7 +134,8 @@ export default function Onboarding({ user, onComplete }) {
           {SPORTS.map(s => {
             const sel = sports.includes(s);
             return (
-              <div key={s} style={{ background: sel ? T.panel : T.bg1, border: `1.5px solid ${sel ? T.accent : T.border}`, borderRadius: T.r14, padding: "14px 16px", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", transition: "all 0.15s", boxShadow: T.shadowSm }}
+              <div key={s}
+                style={{ background: sel ? T.panel : T.bg1, border: `1.5px solid ${sel ? T.accent : T.border}`, borderRadius: T.r14, padding: "14px 16px", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", transition: "all 0.15s", boxShadow: T.shadowSm }}
                 onClick={() => setSports(p => sel ? p.filter(x => x !== s) : [...p, s])}>
                 <span style={{ fontSize: "20px" }}>{s.split(" ")[0]}</span>
                 <span style={{ fontFamily: T.fontBody, fontSize: "14px", fontWeight: "600", color: sel ? T.accent : T.panel }}>{s.split(" ").slice(1).join(" ")}</span>
@@ -133,14 +153,34 @@ export default function Onboarding({ user, onComplete }) {
 
       {/* CTA */}
       <div style={{ marginTop: "auto", paddingTop: "24px" }}>
-        <button onClick={next} disabled={loading} style={{ width: "100%", background: T.panel, border: "none", borderRadius: T.r16, padding: "16px", fontFamily: T.fontDisplay, fontSize: "22px", letterSpacing: "0.05em", color: T.accent, cursor: "pointer", boxShadow: T.shadowMd, opacity: loading ? 0.5 : 1 }}>
-          {loading ? (
-            <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
-              <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${T.accentLight}`, borderTop: `2px solid ${T.accent}`, animation: "spin 0.8s linear infinite" }} />
-              Saving...
-            </span>
-          ) : step < STEPS.length - 1 ? "Continue →" : "Start Sweating 🔥"}
-        </button>
+        {step !== 1 && (
+          <button onClick={next} disabled={loading}
+            style={{ width: "100%", background: T.panel, border: "none", borderRadius: T.r16, padding: "16px", fontFamily: T.fontDisplay, fontSize: "22px", letterSpacing: "0.05em", color: T.accent, cursor: "pointer", boxShadow: T.shadowMd, opacity: loading ? 0.5 : 1 }}>
+            {loading ? (
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+                <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${T.accentLight}`, borderTop: `2px solid ${T.accent}`, animation: "spin 0.8s linear infinite" }} />
+                Saving...
+              </span>
+            ) : step < STEPS.length - 1 ? "Continue →" : "Start Sweating 🔥"}
+          </button>
+        )}
+        {step === 1 && !preview && (
+          <button onClick={next} disabled={loading}
+            style={{ width: "100%", background: T.panel, border: "none", borderRadius: T.r16, padding: "16px", fontFamily: T.fontDisplay, fontSize: "22px", letterSpacing: "0.05em", color: T.accent, cursor: "pointer", boxShadow: T.shadowMd }}>
+            Continue →
+          </button>
+        )}
+        {step === 1 && preview && (
+          <button onClick={next} disabled={loading}
+            style={{ width: "100%", background: T.panel, border: "none", borderRadius: T.r16, padding: "16px", fontFamily: T.fontDisplay, fontSize: "22px", letterSpacing: "0.05em", color: T.accent, cursor: "pointer", boxShadow: T.shadowMd, opacity: loading ? 0.5 : 1 }}>
+            {loading ? (
+              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+                <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${T.accentLight}`, borderTop: `2px solid ${T.accent}`, animation: "spin 0.8s linear infinite" }} />
+                Uploading...
+              </span>
+            ) : "Continue →"}
+          </button>
+        )}
       </div>
     </div>
   );
