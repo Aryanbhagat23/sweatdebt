@@ -84,8 +84,8 @@ export default function CommentsPanel({ videoId, currentUser, onCountChange, onC
 
   // Panel height shrinks when keyboard is open
   const panelHeight = keyboardH > 0
-    ? `calc(100vh - ${keyboardH}px)`
-    : "82vh";
+  ? `calc(100vh - ${keyboardH}px)`
+  : "calc(82vh - 72px)";
 
   return (
     <>
@@ -101,7 +101,7 @@ export default function CommentsPanel({ videoId, currentUser, onCountChange, onC
       {/* Panel — slides up, shrinks to fit above keyboard */}
       <div style={{
         position:"fixed",
-        bottom: keyboardH > 0 ? keyboardH : 0,
+        bottom: keyboardH > 0 ? keyboardH : 72,
         left:"50%",
         transform:`translateX(-50%) translateY(${animIn?"0%":"100%"})`,
         transition:"transform 0.32s cubic-bezier(0.32,0.72,0,1), bottom 0.15s ease",
