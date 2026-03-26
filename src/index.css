@@ -51,6 +51,12 @@ html,body{
     transform: translateX(-50%) !important;
   }
 }
+/* Reel scroll snap */
+.reel-container {
+  scroll-snap-type: y mandatory;
+  overflow-y: scroll;
+  height: 100vh;
+}
 
 *{scrollbar-width:none;-ms-overflow-style:none}
 *::-webkit-scrollbar{display:none}

@@ -52,82 +52,82 @@ export default function Feed({ user, onBellClick }) {
   }
 
   if (loading) return (
-    <div style={{ minHeight:"100vh", background:T.bg0, display:"flex", alignItems:"center", justifyContent:"center" }}>
+    <div style={{ minHeight:"100vh", background:"#000", display:"flex", alignItems:"center", justifyContent:"center" }}>
       <style>{`@keyframes _sp{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ width:"32px", height:"32px", borderRadius:"50%", border:`3px solid ${T.border}`, borderTop:`3px solid ${T.accent}`, animation:"_sp 0.8s linear infinite" }}/>
+      <div style={{ width:"32px", height:"32px", borderRadius:"50%", border:"3px solid #333", borderTop:`3px solid ${T.accent}`, animation:"_sp 0.8s linear infinite" }}/>
     </div>
   );
 
   return (
-    <div style={{ minHeight:"100vh", background:T.bg0, paddingBottom:"90px" }}>
+    <div style={{ background:"#000", minHeight:"100vh", paddingBottom:"72px" }}>
 
-      {/* ── TRANSPARENT OVERLAY HEADER ── */}
+      {/* ── STICKY HEADER — transparent over video ── */}
       <div style={{
-        position:"sticky", top:0,
-        zIndex:100,
-        background:`linear-gradient(to bottom, ${T.panel}ee 0%, ${T.panel}cc 70%, ${T.panel}00 100%)`,
+        position:"fixed",
+        top:0,
+        left:"50%",
+        transform:"translateX(-50%)",
+        width:"100%",
+        maxWidth:"480px",
+        zIndex:200,
+        background:"linear-gradient(to bottom, rgba(5,46,22,0.92) 0%, rgba(5,46,22,0.5) 70%, transparent 100%)",
+        paddingTop:"env(safe-area-inset-top, 0px)",
+        pointerEvents:"auto",
       }}>
-        <div style={{ paddingTop:"env(safe-area-inset-top,0px)" }}>
-          {/* row: logo + tabs + bell */}
-          <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"12px 16px 8px" }}>
-            <span style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:T.accent, letterSpacing:"0.04em", fontStyle:"italic", flexShrink:0 }}>
-              SweatDebt
-            </span>
-            <div style={{ display:"flex", gap:"6px", flex:1, justifyContent:"center" }}>
-              {[
-                { key:"forYou",   label:"For You"  },
-                { key:"friends",  label:"Friends"  },
-                { key:"trending", label:"🔥 Hot"   },
-              ].map(t => (
-                <button key={t.key} type="button"
-                  onClick={() => setActiveTab(t.key)}
-                  style={{
-                    background: activeTab === t.key ? T.accent : "transparent",
-                    border: activeTab === t.key ? "none" : `1px solid ${T.border}`,
-                    borderRadius:"20px",
-                    padding:"5px 12px",
-                    fontFamily:T.fontBody,
-                    fontSize:"12px",
-                    fontWeight: activeTab === t.key ? "600" : "400",
-                    color: activeTab === t.key ? T.bg0 : T.textMuted,
-                    cursor:"pointer",
-                    transition:"all 0.2s",
-                    whiteSpace:"nowrap",
-                  }}
-                >{t.label}</button>
-              ))}
-            </div>
-            <div style={{ flexShrink:0 }}>
-              <NotificationBell user={user} onClick={onBellClick} />
-            </div>
+        <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"12px 16px 16px" }}>
+          <span style={{ fontFamily:T.fontDisplay, fontSize:"20px", color:"#fff", letterSpacing:"0.04em", fontStyle:"italic", flexShrink:0 }}>
+            SweatDebt
+          </span>
+          <div style={{ display:"flex", gap:"5px", flex:1, justifyContent:"center" }}>
+            {[
+              { key:"forYou",   label:"For You" },
+              { key:"friends",  label:"Friends" },
+              { key:"trending", label:"🔥 Hot"  },
+            ].map(t => (
+              <button key={t.key} type="button"
+                onClick={() => setActiveTab(t.key)}
+                style={{
+                  background: activeTab === t.key ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.08)",
+                  border: activeTab === t.key ? "1px solid rgba(255,255,255,0.5)" : "1px solid rgba(255,255,255,0.15)",
+                  borderRadius:"20px", padding:"5px 12px",
+                  fontFamily:T.fontBody, fontSize:"12px",
+                  fontWeight: activeTab === t.key ? "600" : "400",
+                  color: activeTab === t.key ? "#fff" : "rgba(255,255,255,0.55)",
+                  cursor:"pointer",
+                  backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)",
+                  transition:"all 0.2s", whiteSpace:"nowrap",
+                }}
+              >{t.label}</button>
+            ))}
+          </div>
+          <div style={{ flexShrink:0 }}>
+            <NotificationBell user={user} onClick={onBellClick} light />
           </div>
         </div>
       </div>
 
-      {/* ── VIDEO CARDS ── */}
+      {/* ── REEL ITEMS — each one is 100vh ── */}
       {filtered.length === 0 ? (
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"60vh", gap:"12px", padding:"24px" }}>
+        <div style={{ height:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"12px" }}>
           <div style={{ fontSize:"48px" }}>🎥</div>
-          <div style={{ fontFamily:T.fontDisplay, fontSize:"24px", color:T.panel, letterSpacing:"0.04em", fontStyle:"italic" }}>
+          <div style={{ fontFamily:T.fontDisplay, fontSize:"24px", color:"#fff", letterSpacing:"0.04em", fontStyle:"italic" }}>
             {activeTab === "friends" ? "No friend forfeits yet" : "No forfeits yet"}
           </div>
-          <div style={{ fontFamily:T.fontBody, fontSize:"14px", color:T.textMuted, textAlign:"center" }}>
+          <div style={{ fontFamily:T.fontBody, fontSize:"14px", color:"rgba(255,255,255,0.45)", textAlign:"center", padding:"0 32px" }}>
             {activeTab === "friends" ? "Add friends to see their forfeits here" : "Be the first to lose a bet 😤"}
           </div>
         </div>
       ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:"8px", padding:"8px 0" }}>
-          {filtered.map(video => (
-            <VideoCard
-              key={video.id}
-              video={video}
-              currentUser={user}
-              onCommentOpen={() => { setActiveVideoId(video.id); setShowComments(true); }}
-              onNavigate={navigate}
-              commentCount={commentCounts[video.id] ?? video.comments ?? 0}
-            />
-          ))}
-        </div>
+        filtered.map(video => (
+          <ReelPage
+            key={video.id}
+            video={video}
+            currentUser={user}
+            onCommentOpen={() => { setActiveVideoId(video.id); setShowComments(true); }}
+            onNavigate={navigate}
+            commentCount={commentCounts[video.id] ?? video.comments ?? 0}
+          />
+        ))
       )}
 
       {/* COMMENTS PANEL */}
@@ -143,27 +143,59 @@ export default function Feed({ user, onBellClick }) {
   );
 }
 
-/* ── Video Card ── */
-function VideoCard({ video, currentUser, onCommentOpen, onNavigate, commentCount }) {
+/* ─────────────────────────────────────────
+   REEL PAGE — one full-screen slot per video
+───────────────────────────────────────── */
+function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount }) {
   const [liked,     setLiked]     = useState(false);
   const [likes,     setLikes]     = useState(video.likes || 0);
   const [approved,  setApproved]  = useState(video.approved || false);
   const [disputed,  setDisputed]  = useState(video.disputed || false);
   const [approving, setApproving] = useState(false);
+  const [playing,   setPlaying]   = useState(false);
+  const vidRef = useRef(null);
+  const pageRef = useRef(null);
+
+  // play when scrolled into view, pause when out
+  useEffect(() => {
+    const el = pageRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          vidRef.current?.play().catch(() => {});
+          setPlaying(true);
+        } else {
+          vidRef.current?.pause();
+          setPlaying(false);
+        }
+      },
+      { threshold: 0.6 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const togglePlay = () => {
+    const v = vidRef.current;
+    if (!v) return;
+    if (v.paused) { v.play().catch(()=>{}); setPlaying(true); }
+    else          { v.pause(); setPlaying(false); }
+  };
 
   const handleLike = async () => {
     const next = !liked;
     setLiked(next);
     setLikes(l => next ? l + 1 : l - 1);
-    try { await updateDoc(doc(db, "videos", video.id), { likes: increment(next ? 1 : -1) }); } catch(e) {}
+    try { await updateDoc(doc(db,"videos",video.id), { likes: increment(next?1:-1) }); } catch(e) {}
   };
 
   const handleApprove = async () => {
     setApproving(true);
     try {
-      await updateDoc(doc(db, "videos", video.id), { approved:true, disputed:false });
+      await updateDoc(doc(db,"videos",video.id), { approved:true, disputed:false });
       if (video.betId && video.betId !== "general")
-        await updateDoc(doc(db, "bets", video.betId), { status:"lost" });
+        await updateDoc(doc(db,"bets",video.betId), { status:"lost" });
       setApproved(true);
     } catch(e) {}
     setApproving(false);
@@ -172,9 +204,9 @@ function VideoCard({ video, currentUser, onCommentOpen, onNavigate, commentCount
   const handleDispute = async () => {
     setApproving(true);
     try {
-      await updateDoc(doc(db, "videos", video.id), { disputed:true, approved:false });
+      await updateDoc(doc(db,"videos",video.id), { disputed:true, approved:false });
       if (video.betId && video.betId !== "general")
-        await updateDoc(doc(db, "bets", video.betId), { status:"disputed" });
+        await updateDoc(doc(db,"bets",video.betId), { status:"disputed" });
       setDisputed(true);
     } catch(e) {}
     setApproving(false);
@@ -195,106 +227,132 @@ function VideoCard({ video, currentUser, onCommentOpen, onNavigate, commentCount
   );
 
   return (
-    <div style={{ background:T.bg1, borderRadius:"0", borderTop:`1px solid ${T.borderCard}`, borderBottom:`1px solid ${T.borderCard}` }}>
+    <div ref={pageRef} style={{
+      position:"relative",
+      height:"100vh",
+      display:"flex",
+      flexDirection:"column",
+      background:"#000",
+      scrollSnapAlign:"start",
+    }}>
+      {/* VIDEO — centred, letterboxed if horizontal */}
+      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", cursor:"pointer" }}
+        onClick={togglePlay}>
+        <video
+          ref={vidRef}
+          src={video.videoUrl}
+          style={{
+            maxWidth:"100%",
+            maxHeight:"100%",
+            objectFit:"contain",   /* keeps aspect ratio, centres horizontally */
+            display:"block",
+          }}
+          loop playsInline
+        />
+
+        {/* play/pause overlay */}
+        {!playing && (
+          <div style={{
+            position:"absolute",
+            width:"64px", height:"64px",
+            borderRadius:"50%",
+            background:"rgba(0,0,0,0.5)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:"28px",
+            pointerEvents:"none",
+          }}>▶</div>
+        )}
+      </div>
+
+      {/* bottom gradient */}
+      <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"55%", background:"linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.3) 60%, transparent 100%)", pointerEvents:"none" }}/>
 
       {/* status badge */}
-      <div style={{ position:"relative" }}>
-        <video
-          src={video.videoUrl}
-          style={{ width:"100%", maxHeight:"480px", display:"block", objectFit:"cover", background:"#000" }}
-          controls playsInline preload="metadata"
-        />
-        <div style={{ position:"absolute", top:"10px", left:"10px" }}>
-          {approved  && <Bdg bg={T.accent}   color={T.bg0}   text="APPROVED ✓" />}
-          {disputed  && <Bdg bg="#ef4444"    color="#fff"    text="DISPUTED ✗" />}
-          {!approved && !disputed && <Bdg bg={T.panel} color={T.accent} text="FORFEIT 💀" />}
-        </div>
+      <div style={{ position:"absolute", top:"72px", left:"14px", zIndex:10 }}>
+        {approved  && <Bdg bg="rgba(16,185,129,0.9)"  color="#052e16" text="APPROVED ✓" />}
+        {disputed  && <Bdg bg="rgba(239,68,68,0.9)"   color="#fff"    text="DISPUTED ✗" />}
+        {!approved && !disputed && <Bdg bg="rgba(5,46,22,0.8)" color="#10b981" text="FORFEIT 💀" />}
       </div>
 
-      {/* user row + actions */}
-      <div style={{ display:"flex", alignItems:"center", padding:"10px 14px" }}>
-        {/* avatar */}
-        <div style={{ cursor:"pointer", marginRight:"10px", flexShrink:0 }}
+      {/* ── RIGHT SIDE BUTTONS ── */}
+      <div style={{
+        position:"absolute", right:"12px", bottom:"180px",
+        display:"flex", flexDirection:"column", alignItems:"center", gap:"20px",
+        zIndex:10,
+      }}>
+        <SideBtn icon={liked?"❤️":"🤍"} count={likes}        label="Like"    onClick={handleLike} />
+        <SideBtn icon="💬"               count={commentCount} label="Comment" onClick={onCommentOpen} />
+        <SideBtn icon="↗"               count={null}         label="Share"   onClick={handleShare} />
+        <SideBtn icon="⚔️"              count={null}         label="Bet"     onClick={() => onNavigate("/create")} />
+      </div>
+
+      {/* ── BOTTOM INFO ── */}
+      <div style={{ position:"absolute", bottom:"80px", left:"14px", right:"72px", zIndex:10 }}>
+        {/* user */}
+        <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"10px", cursor:"pointer" }}
           onClick={() => onNavigate(`/profile/${video.uploadedBy}`)}>
           {video.uploaderPhoto
-            ? <img src={video.uploaderPhoto} alt="" style={{ width:"38px", height:"38px", borderRadius:"50%", objectFit:"cover", border:`2px solid ${T.accent}` }}/>
-            : <div style={{ width:"38px", height:"38px", borderRadius:"50%", background:T.panel, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.fontDisplay, fontSize:"16px", color:T.accent }}>
-                {(video.uploadedByName || "?").charAt(0)}
+            ? <img src={video.uploaderPhoto} alt="" style={{ width:"38px", height:"38px", borderRadius:"50%", objectFit:"cover", border:"2px solid #10b981" }}/>
+            : <div style={{ width:"38px", height:"38px", borderRadius:"50%", background:"#052e16", display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.fontDisplay, fontSize:"16px", color:"#10b981", border:"2px solid #10b981" }}>
+                {(video.uploadedByName||"?").charAt(0)}
               </div>
           }
-        </div>
-        {/* name + time */}
-        <div style={{ flex:1 }}>
-          <div style={{ fontFamily:T.fontBody, fontSize:"14px", fontWeight:"600", color:T.panel, cursor:"pointer" }}
-            onClick={() => onNavigate(`/profile/${video.uploadedBy}`)}>
-            @{(video.uploadedByName || "user").toLowerCase().replace(/\s/g,"")}
-          </div>
-          <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:T.textMuted }}>
-            {ago(video.createdAt)}
+          <div>
+            <div style={{ fontFamily:T.fontBody, fontSize:"14px", fontWeight:"600", color:"#fff" }}>
+              @{(video.uploadedByName||"user").toLowerCase().replace(/\s/g,"")}
+            </div>
+            <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:"rgba(255,255,255,0.5)" }}>
+              {ago(video.createdAt)}
+            </div>
           </div>
         </div>
-        {/* action buttons */}
-        <div style={{ display:"flex", gap:"4px" }}>
-          <ActionBtn icon={liked ? "❤️" : "🤍"} label={String(likes)}   onClick={handleLike} active={liked} />
-          <ActionBtn icon="💬"                    label={String(commentCount)} onClick={onCommentOpen} />
-          <ActionBtn icon="↗"                    label="Share"           onClick={handleShare} />
-        </div>
-      </div>
 
-      {/* approve / dispute */}
-      {canVerdict && (
-        <div style={{ display:"flex", gap:"8px", padding:"0 14px 12px" }}>
-          <button type="button" onClick={handleApprove} disabled={approving}
-            style={{ flex:1, padding:"12px", background:T.accent, border:"none", borderRadius:"12px", fontFamily:T.fontDisplay, fontSize:"18px", letterSpacing:"0.04em", color:T.bg0, cursor:"pointer", opacity:approving?0.5:1 }}>
-            ✓ APPROVE
-          </button>
-          <button type="button" onClick={handleDispute} disabled={approving}
-            style={{ flex:1, padding:"12px", background:"transparent", border:"2px solid #ef4444", borderRadius:"12px", fontFamily:T.fontDisplay, fontSize:"18px", letterSpacing:"0.04em", color:"#ef4444", cursor:"pointer", opacity:approving?0.5:1 }}>
-            ✗ DISPUTE
-          </button>
-        </div>
-      )}
-
-      {approved && (
-        <div style={{ margin:"0 14px 12px", background:`${T.accent}20`, border:`1px solid ${T.accent}60`, borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:T.accent }}>
-          ✓ Forfeit approved! 🏆
-        </div>
-      )}
-      {disputed && (
-        <div style={{ margin:"0 14px 12px", background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#ef4444" }}>
-          ⚠ Disputed — going to jury...
-        </div>
-      )}
-
-      {/* rematch */}
-      <div style={{ padding:"0 14px 14px" }}>
-        <button type="button"
-          style={{ width:"100%", padding:"10px", background:"transparent", border:`1px solid ${T.border}`, borderRadius:"10px", fontFamily:T.fontDisplay, fontSize:"16px", letterSpacing:"0.04em", color:T.textMuted, cursor:"pointer" }}>
-          ⚔️ CHALLENGE TO REMATCH
-        </button>
+        {/* approve / dispute */}
+        {canVerdict && (
+          <div style={{ display:"flex", gap:"8px" }}>
+            <button type="button" onClick={handleApprove} disabled={approving}
+              style={{ flex:1, padding:"11px", background:"rgba(16,185,129,0.9)", border:"none", borderRadius:"12px", fontFamily:T.fontDisplay, fontSize:"17px", letterSpacing:"0.04em", color:"#052e16", cursor:"pointer", opacity:approving?0.5:1 }}>
+              ✓ APPROVE
+            </button>
+            <button type="button" onClick={handleDispute} disabled={approving}
+              style={{ flex:1, padding:"11px", background:"rgba(239,68,68,0.12)", border:"2px solid rgba(239,68,68,0.65)", borderRadius:"12px", fontFamily:T.fontDisplay, fontSize:"17px", letterSpacing:"0.04em", color:"#ef4444", cursor:"pointer", opacity:approving?0.5:1 }}>
+              ✗ DISPUTE
+            </button>
+          </div>
+        )}
+        {approved && (
+          <div style={{ background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#10b981" }}>
+            ✓ Forfeit approved! 🏆
+          </div>
+        )}
+        {disputed && (
+          <div style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#ef4444" }}>
+            ⚠ Disputed — going to jury...
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function ActionBtn({ icon, label, onClick, active }) {
+/* ── Side button ── */
+function SideBtn({ icon, count, label, onClick }) {
   const [p, setP] = useState(false);
   return (
-    <button type="button"
+    <div
       onMouseDown={()=>setP(true)} onMouseUp={()=>setP(false)}
       onTouchStart={()=>setP(true)} onTouchEnd={()=>setP(false)}
       onClick={onClick}
-      style={{
-        display:"flex", flexDirection:"column", alignItems:"center", gap:"2px",
-        background:"transparent", border:"none", cursor:"pointer",
-        padding:"6px 8px", borderRadius:"10px",
-        transform: p ? "scale(0.9)" : "scale(1)",
-        transition:"transform 0.15s",
-        minWidth:"44px", minHeight:"44px", justifyContent:"center",
-      }}>
-      <span style={{ fontSize:"20px" }}>{icon}</span>
-      <span style={{ fontFamily:T.fontMono, fontSize:"10px", color:active ? T.accent : T.textMuted }}>{label}</span>
-    </button>
+      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"3px", cursor:"pointer", transform:p?"scale(0.88)":"scale(1)", transition:"transform 0.15s cubic-bezier(0.34,1.56,0.64,1)" }}
+    >
+      <div style={{ width:"46px", height:"46px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"20px" }}>
+        {icon}
+      </div>
+      {count !== null && count !== undefined && (
+        <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:"rgba(255,255,255,0.9)", fontWeight:"500" }}>{count}</div>
+      )}
+      <div style={{ fontFamily:T.fontMono, fontSize:"9px", color:"rgba(255,255,255,0.45)", letterSpacing:"0.05em" }}>{label.toUpperCase()}</div>
+    </div>
   );
 }
 
