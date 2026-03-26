@@ -137,7 +137,13 @@ export default function CommentsPanel({ videoId, currentUser, onCountChange, onC
         </div>
 
         {/* Comment list */}
-        <div ref={listRef} style={{flex:1,overflowY:"auto",padding:"0 16px 4px",overscrollBehavior:"contain"}}>
+        <div 
+  ref={listRef} 
+  style={{flex:1,overflowY:"auto",padding:"0 16px 4px",overscrollBehavior:"contain"}}
+  onTouchStart={e => e.stopPropagation()}
+  onTouchMove={e => e.stopPropagation()}
+  onTouchEnd={e => e.stopPropagation()}
+>
           {loading?(
             <div style={{display:"flex",justifyContent:"center",padding:"32px"}}>
               <div style={{width:"24px",height:"24px",borderRadius:"50%",border:`2px solid ${T.border}`,borderTop:`2px solid ${T.accent}`,animation:"spin 0.8s linear infinite"}}/>
