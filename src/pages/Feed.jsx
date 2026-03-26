@@ -52,29 +52,25 @@ export default function Feed({ user, onBellClick }) {
   }
 
   if (loading) return (
-    <div style={{ minHeight:"100vh", background:"#000", display:"flex", alignItems:"center", justifyContent:"center" }}>
+    <div style={{ height:"100vh", background:"#000", display:"flex", alignItems:"center", justifyContent:"center" }}>
       <style>{`@keyframes _sp{to{transform:rotate(360deg)}}`}</style>
       <div style={{ width:"32px", height:"32px", borderRadius:"50%", border:"3px solid #333", borderTop:`3px solid ${T.accent}`, animation:"_sp 0.8s linear infinite" }}/>
     </div>
   );
 
   return (
-    <div style={{ background:"#000", minHeight:"100vh", paddingBottom:"72px" }}>
+    <div style={{ position:"relative", height:"100vh", background:"#000" }}>
 
-      {/* ── STICKY HEADER — transparent over video ── */}
+      {/* ── STICKY HEADER — floats above the scroll container ── */}
       <div style={{
-        position:"fixed",
-        top:0,
-        left:"50%",
-        transform:"translateX(-50%)",
-        width:"100%",
-        maxWidth:"480px",
+        position:"absolute",
+        top:0, left:0, right:0,
         zIndex:200,
         background:"linear-gradient(to bottom, rgba(5,46,22,0.92) 0%, rgba(5,46,22,0.5) 70%, transparent 100%)",
         paddingTop:"env(safe-area-inset-top, 0px)",
         pointerEvents:"auto",
       }}>
-        <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"12px 16px 16px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"12px 16px 20px" }}>
           <span style={{ fontFamily:T.fontDisplay, fontSize:"20px", color:"#fff", letterSpacing:"0.04em", fontStyle:"italic", flexShrink:0 }}>
             SweatDebt
           </span>
@@ -106,29 +102,44 @@ export default function Feed({ user, onBellClick }) {
         </div>
       </div>
 
-      {/* ── REEL ITEMS — each one is 100vh ── */}
-      {filtered.length === 0 ? (
-        <div style={{ height:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"12px" }}>
-          <div style={{ fontSize:"48px" }}>🎥</div>
-          <div style={{ fontFamily:T.fontDisplay, fontSize:"24px", color:"#fff", letterSpacing:"0.04em", fontStyle:"italic" }}>
-            {activeTab === "friends" ? "No friend forfeits yet" : "No forfeits yet"}
+      {/* ── SCROLL SNAP CONTAINER ──
+          height: 100vh, overflow-y: scroll, snap-type: y mandatory
+          This is the key — one scroll = one video
+      ── */}
+      <div style={{
+        height:"100vh",
+        overflowY:"scroll",
+        scrollSnapType:"y mandatory",
+        WebkitOverflowScrolling:"touch",
+        /* hide scrollbar */
+        scrollbarWidth:"none",
+        msOverflowStyle:"none",
+      }}>
+        <style>{`.feed-scroll::-webkit-scrollbar{display:none}`}</style>
+
+        {filtered.length === 0 ? (
+          <div style={{ height:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"12px", scrollSnapAlign:"start" }}>
+            <div style={{ fontSize:"48px" }}>🎥</div>
+            <div style={{ fontFamily:T.fontDisplay, fontSize:"24px", color:"#fff", letterSpacing:"0.04em", fontStyle:"italic" }}>
+              {activeTab === "friends" ? "No friend forfeits yet" : "No forfeits yet"}
+            </div>
+            <div style={{ fontFamily:T.fontBody, fontSize:"14px", color:"rgba(255,255,255,0.45)", textAlign:"center", padding:"0 32px" }}>
+              {activeTab === "friends" ? "Add friends to see their forfeits here" : "Be the first to lose a bet 😤"}
+            </div>
           </div>
-          <div style={{ fontFamily:T.fontBody, fontSize:"14px", color:"rgba(255,255,255,0.45)", textAlign:"center", padding:"0 32px" }}>
-            {activeTab === "friends" ? "Add friends to see their forfeits here" : "Be the first to lose a bet 😤"}
-          </div>
-        </div>
-      ) : (
-        filtered.map(video => (
-          <ReelPage
-            key={video.id}
-            video={video}
-            currentUser={user}
-            onCommentOpen={() => { setActiveVideoId(video.id); setShowComments(true); }}
-            onNavigate={navigate}
-            commentCount={commentCounts[video.id] ?? video.comments ?? 0}
-          />
-        ))
-      )}
+        ) : (
+          filtered.map(video => (
+            <ReelPage
+              key={video.id}
+              video={video}
+              currentUser={user}
+              onCommentOpen={() => { setActiveVideoId(video.id); setShowComments(true); }}
+              onNavigate={navigate}
+              commentCount={commentCounts[video.id] ?? video.comments ?? 0}
+            />
+          ))
+        )}
+      </div>
 
       {/* COMMENTS PANEL */}
       {showComments && activeVideoId && (
@@ -144,7 +155,7 @@ export default function Feed({ user, onBellClick }) {
 }
 
 /* ─────────────────────────────────────────
-   REEL PAGE — one full-screen slot per video
+   REEL PAGE — each one snaps to full screen
 ───────────────────────────────────────── */
 function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount }) {
   const [liked,     setLiked]     = useState(false);
@@ -153,10 +164,10 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
   const [disputed,  setDisputed]  = useState(video.disputed || false);
   const [approving, setApproving] = useState(false);
   const [playing,   setPlaying]   = useState(false);
-  const vidRef = useRef(null);
+  const vidRef  = useRef(null);
   const pageRef = useRef(null);
 
-  // play when scrolled into view, pause when out
+  // auto play when snapped into view
   useEffect(() => {
     const el = pageRef.current;
     if (!el) return;
@@ -170,7 +181,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
           setPlaying(false);
         }
       },
-      { threshold: 0.6 }
+      { threshold: 0.8 }
     );
     observer.observe(el);
     return () => observer.disconnect();
@@ -227,45 +238,53 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
   );
 
   return (
-    <div ref={pageRef} style={{
-      position:"relative",
-      height:"100vh",
-      display:"flex",
-      flexDirection:"column",
-      background:"#000",
-      scrollSnapAlign:"start",
-    }}>
-      {/* VIDEO — centred, letterboxed if horizontal */}
-      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", overflow:"hidden", cursor:"pointer" }}
-        onClick={togglePlay}>
-        <video
-          ref={vidRef}
-          src={video.videoUrl}
-          style={{
-            maxWidth:"100%",
-            maxHeight:"100%",
-            objectFit:"contain",   /* keeps aspect ratio, centres horizontally */
-            display:"block",
-          }}
-          loop playsInline
-        />
+    <div
+      ref={pageRef}
+      style={{
+        position:"relative",
+        height:"100vh",
+        width:"100%",
+        /* THE KEY LINE — snap each item to start */
+        scrollSnapAlign:"start",
+        scrollSnapStop:"always",
+        overflow:"hidden",
+        background:"#000",
+        display:"flex",
+        alignItems:"center",
+        justifyContent:"center",
+      }}
+    >
+      {/* VIDEO */}
+      <video
+        ref={vidRef}
+        src={video.videoUrl}
+        onClick={togglePlay}
+        style={{
+          width:"100%",
+          height:"100%",
+          objectFit:"contain",   /* centred, letterboxed for horizontal videos */
+          display:"block",
+          cursor:"pointer",
+        }}
+        loop
+        playsInline
+      />
 
-        {/* play/pause overlay */}
-        {!playing && (
-          <div style={{
-            position:"absolute",
-            width:"64px", height:"64px",
-            borderRadius:"50%",
-            background:"rgba(0,0,0,0.5)",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            fontSize:"28px",
-            pointerEvents:"none",
-          }}>▶</div>
-        )}
-      </div>
+      {/* play icon overlay when paused */}
+      {!playing && (
+        <div style={{
+          position:"absolute",
+          width:"64px", height:"64px",
+          borderRadius:"50%",
+          background:"rgba(0,0,0,0.5)",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          fontSize:"26px",
+          pointerEvents:"none",
+        }}>▶</div>
+      )}
 
       {/* bottom gradient */}
-      <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"55%", background:"linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.3) 60%, transparent 100%)", pointerEvents:"none" }}/>
+      <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"55%", background:"linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.25) 65%, transparent 100%)", pointerEvents:"none" }}/>
 
       {/* status badge */}
       <div style={{ position:"absolute", top:"72px", left:"14px", zIndex:10 }}>
@@ -274,7 +293,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
         {!approved && !disputed && <Bdg bg="rgba(5,46,22,0.8)" color="#10b981" text="FORFEIT 💀" />}
       </div>
 
-      {/* ── RIGHT SIDE BUTTONS ── */}
+      {/* right side buttons */}
       <div style={{
         position:"absolute", right:"12px", bottom:"180px",
         display:"flex", flexDirection:"column", alignItems:"center", gap:"20px",
@@ -286,9 +305,9 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
         <SideBtn icon="⚔️"              count={null}         label="Bet"     onClick={() => onNavigate("/create")} />
       </div>
 
-      {/* ── BOTTOM INFO ── */}
+      {/* bottom info */}
       <div style={{ position:"absolute", bottom:"80px", left:"14px", right:"72px", zIndex:10 }}>
-        {/* user */}
+        {/* user row */}
         <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"10px", cursor:"pointer" }}
           onClick={() => onNavigate(`/profile/${video.uploadedBy}`)}>
           {video.uploaderPhoto
@@ -307,7 +326,6 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
           </div>
         </div>
 
-        {/* approve / dispute */}
         {canVerdict && (
           <div style={{ display:"flex", gap:"8px" }}>
             <button type="button" onClick={handleApprove} disabled={approving}
@@ -320,22 +338,14 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
             </button>
           </div>
         )}
-        {approved && (
-          <div style={{ background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#10b981" }}>
-            ✓ Forfeit approved! 🏆
-          </div>
-        )}
-        {disputed && (
-          <div style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#ef4444" }}>
-            ⚠ Disputed — going to jury...
-          </div>
-        )}
+        {approved && <div style={{ background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#10b981" }}>✓ Forfeit approved! 🏆</div>}
+        {disputed && <div style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#ef4444" }}>⚠ Disputed — going to jury...</div>}
       </div>
     </div>
   );
 }
 
-/* ── Side button ── */
+/* ── helpers ── */
 function SideBtn({ icon, count, label, onClick }) {
   const [p, setP] = useState(false);
   return (
