@@ -16,31 +16,35 @@ export default function CommentsPanel({ videoId, currentUser, onCountChange, onC
   const inputRef = useRef(null);
   const listRef  = useRef(null);
 
-  // Animate in
   useEffect(() => {
     const t = setTimeout(() => setAnimIn(true), 20);
     return () => clearTimeout(t);
   }, []);
 
-  // Track keyboard height (iOS + Android)
+  // Track keyboard height on both iOS and Android
   useEffect(() => {
-    if (!window.visualViewport) return;
-    const fn = () => setKeyboardH(Math.max(0, window.innerHeight - window.visualViewport.height));
-    window.visualViewport.addEventListener("resize", fn);
-    window.visualViewport.addEventListener("scroll", fn);
+    const update = () => {
+      if (window.visualViewport) {
+        const kh = Math.max(0, window.innerHeight - window.visualViewport.height);
+        setKeyboardH(kh);
+      }
+    };
+    window.visualViewport?.addEventListener("resize", update);
+    window.visualViewport?.addEventListener("scroll", update);
+    window.addEventListener("resize", update);
     return () => {
-      window.visualViewport.removeEventListener("resize", fn);
-      window.visualViewport.removeEventListener("scroll", fn);
+      window.visualViewport?.removeEventListener("resize", update);
+      window.visualViewport?.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
     };
   }, []);
 
-  // Load comments
   useEffect(() => {
     const u = onSnapshot(query(collection(db,"videos",videoId,"comments")), snap => {
-      const data = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-      const top  = data.filter(c => !c.replyTo).sort((a,b) => (a.createdAt?.toDate?.()||0)-(b.createdAt?.toDate?.()||0));
-      const replies = data.filter(c => !!c.replyTo);
-      setAll(top.map(c => ({ ...c, replies: replies.filter(r=>r.replyTo===c.id).sort((a,b)=>(a.createdAt?.toDate?.()||0)-(b.createdAt?.toDate?.()||0)) })));
+      const data = snap.docs.map(d => ({id:d.id,...d.data()}));
+      const top  = data.filter(c=>!c.replyTo).sort((a,b)=>(a.createdAt?.toDate?.()||0)-(b.createdAt?.toDate?.()||0));
+      const replies = data.filter(c=>!!c.replyTo);
+      setAll(top.map(c=>({...c,replies:replies.filter(r=>r.replyTo===c.id).sort((a,b)=>(a.createdAt?.toDate?.()||0)-(b.createdAt?.toDate?.()||0))})));
       onCountChange(data.length);
       setLoading(false);
     });
@@ -48,7 +52,7 @@ export default function CommentsPanel({ videoId, currentUser, onCountChange, onC
   }, [videoId]);
 
   useEffect(() => {
-    if (replyTo) setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 100);
+    if (replyTo) setTimeout(() => inputRef.current?.focus({ preventScroll:true }), 100);
   }, [replyTo]);
 
   const post = async () => {
@@ -59,66 +63,54 @@ export default function CommentsPanel({ videoId, currentUser, onCountChange, onC
     setText(""); setReplyTo(null);
     try {
       await addDoc(collection(db,"videos",videoId,"comments"), {
-        text: t, userId: currentUser.uid, userName: currentUser.displayName,
-        userPhoto: currentUser.photoURL || null, createdAt: serverTimestamp(),
-        likes: 0, replyTo: captured?.id || null, replyToName: captured?.userName || null,
+        text:t, userId:currentUser.uid, userName:currentUser.displayName,
+        userPhoto:currentUser.photoURL||null, createdAt:serverTimestamp(),
+        likes:0, replyTo:captured?.id||null, replyToName:captured?.userName||null,
       });
-      await updateDoc(doc(db,"videos",videoId), { comments: increment(1) });
-      setTimeout(() => listRef.current?.scrollTo({ top: 99999, behavior: "smooth" }), 200);
-    } catch (e) { console.error(e); setText(t); }
+      await updateDoc(doc(db,"videos",videoId), { comments:increment(1) });
+      setTimeout(() => listRef.current?.scrollTo({ top:99999, behavior:"smooth" }), 200);
+    } catch(e) { console.error(e); setText(t); }
     setPosting(false);
   };
 
-  const handleClose = () => {
-    setAnimIn(false);
-    setTimeout(onClose, 300);
-  };
-
+  const handleClose = () => { setAnimIn(false); setTimeout(onClose, 300); };
   const timeAgo = ts => {
     if (!ts?.toDate) return "now";
-    const s = Math.floor((new Date() - ts.toDate()) / 1000);
-    if (s < 60) return "now"; if (s < 3600) return `${Math.floor(s/60)}m`;
-    if (s < 86400) return `${Math.floor(s/3600)}h`; return `${Math.floor(s/86400)}d`;
+    const s = Math.floor((new Date()-ts.toDate())/1000);
+    if (s<60) return "now"; if (s<3600) return `${Math.floor(s/60)}m`;
+    if (s<86400) return `${Math.floor(s/3600)}h`; return `${Math.floor(s/86400)}d`;
   };
-
   const REACTIONS = ["😂","🔥","💀","😤","👑","🫡","💪","😭"];
+
+  // Panel height shrinks when keyboard is open
+  const panelHeight = keyboardH > 0
+    ? `calc(100vh - ${keyboardH}px)`
+    : "82vh";
 
   return (
     <>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
 
-      {/*
-        Backdrop — zIndex 4000 covers EVERYTHING:
-        - nav bar (1000)
-        - feed icons (10)
-        - dot indicators (50)
-        This means the icons/nav are NEVER hidden by React state,
-        they're simply covered by this backdrop. When panel closes,
-        the backdrop removes and icons reappear instantly — no Android bug.
-      */}
+      {/* Backdrop — zIndex 4000 covers nav + feed icons without hiding them */}
       <div style={{
-        position:"fixed", inset:0,
-        background: animIn ? "rgba(5,46,22,0.5)" : "rgba(5,46,22,0)",
-        zIndex: 4000,
-        transition:"background 0.3s ease",
-      }} onClick={handleClose} />
+        position:"fixed",inset:0,
+        background:animIn?"rgba(5,46,22,0.5)":"rgba(5,46,22,0)",
+        zIndex:4000,transition:"background 0.3s ease",
+      }} onClick={handleClose}/>
 
-      {/* Panel — zIndex 4001, above backdrop */}
+      {/* Panel — slides up, shrinks to fit above keyboard */}
       <div style={{
         position:"fixed",
         bottom: keyboardH > 0 ? keyboardH : 0,
         left:"50%",
         transform:`translateX(-50%) translateY(${animIn?"0%":"100%"})`,
         transition:"transform 0.32s cubic-bezier(0.32,0.72,0,1), bottom 0.15s ease",
-        width:"100%",
-        maxWidth:"480px",
-        height: keyboardH > 0 ? `calc(82vh - ${keyboardH}px)` : "82vh",
-        minHeight:"320px",
-        background: T.bg0,
+        width:"100%", maxWidth:"480px",
+        height:panelHeight, minHeight:"300px",
+        background:T.bg0,
         borderRadius:"20px 20px 0 0",
-        zIndex: 4001,
-        display:"flex",
-        flexDirection:"column",
+        zIndex:4001,
+        display:"flex", flexDirection:"column",
         willChange:"transform",
       }}>
         {/* Handle */}
@@ -133,41 +125,41 @@ export default function CommentsPanel({ videoId, currentUser, onCountChange, onC
             onClick={handleClose}>✕</div>
         </div>
 
-        {/* Reactions */}
+        {/* Quick reactions */}
         <div style={{display:"flex",gap:"8px",padding:"0 16px 10px",overflowX:"auto",flexShrink:0}}>
-          {REACTIONS.map(e => (
+          {REACTIONS.map(e=>(
             <button key={e} type="button"
               style={{background:T.bg1,border:`1px solid ${T.borderCard}`,borderRadius:T.rFull,padding:"6px 12px",fontSize:"18px",cursor:"pointer",flexShrink:0,boxShadow:T.shadowSm}}
-              onClick={() => { setText(p=>p+e); inputRef.current?.focus({ preventScroll:true }); }}>
+              onClick={()=>{setText(p=>p+e);inputRef.current?.focus({preventScroll:true});}}>
               {e}
             </button>
           ))}
         </div>
 
-        {/* Comments list */}
+        {/* Comment list */}
         <div ref={listRef} style={{flex:1,overflowY:"auto",padding:"0 16px 4px",overscrollBehavior:"contain"}}>
-          {loading ? (
+          {loading?(
             <div style={{display:"flex",justifyContent:"center",padding:"32px"}}>
               <div style={{width:"24px",height:"24px",borderRadius:"50%",border:`2px solid ${T.border}`,borderTop:`2px solid ${T.accent}`,animation:"spin 0.8s linear infinite"}}/>
             </div>
-          ) : all.length === 0 ? (
+          ):all.length===0?(
             <div style={{textAlign:"center",padding:"32px 0"}}>
               <div style={{fontSize:"32px",marginBottom:"8px"}}>💬</div>
               <div style={{fontFamily:T.fontDisplay,fontSize:"20px",color:T.textMuted,letterSpacing:"0.04em",fontStyle:"italic"}}>No comments yet</div>
-              <div style={{fontFamily:T.fontBody,fontSize:"13px",color:T.textMuted,marginTop:"4px"}}>Be the first to roast them 😂</div>
+              <div style={{fontFamily:T.fontBody,fontSize:"13px",color:T.textMuted,marginTop:"4px"}}>Be the first to react 😂</div>
             </div>
-          ) : (
-            all.map(c => (
+          ):(
+            all.map(c=>(
               <div key={c.id} style={{marginBottom:"4px"}}>
                 <CommentRow c={c} isOwn={c.userId===currentUser?.uid} timeAgo={timeAgo}
-                  onReply={() => { setReplyTo({id:c.id,userName:c.userName}); setText(""); setTimeout(()=>inputRef.current?.focus({preventScroll:true}),100); }}
-                  onProfile={() => { handleClose(); setTimeout(()=>navigate(`/profile/${c.userId}`),300); }}/>
-                {c.replies?.length > 0 && (
+                  onReply={()=>{setReplyTo({id:c.id,userName:c.userName});setText("");setTimeout(()=>inputRef.current?.focus({preventScroll:true}),100);}}
+                  onProfile={()=>{handleClose();setTimeout(()=>navigate(`/profile/${c.userId}`),300);}}/>
+                {c.replies?.length>0&&(
                   <div style={{marginLeft:"44px",borderLeft:`2px solid ${T.border}`,paddingLeft:"12px",marginBottom:"8px"}}>
-                    {c.replies.map(r => (
+                    {c.replies.map(r=>(
                       <CommentRow key={r.id} c={r} isOwn={r.userId===currentUser?.uid} timeAgo={timeAgo}
-                        onReply={() => { setReplyTo({id:c.id,userName:c.userName}); setText(""); setTimeout(()=>inputRef.current?.focus({preventScroll:true}),100); }}
-                        onProfile={() => { handleClose(); setTimeout(()=>navigate(`/profile/${r.userId}`),300); }}
+                        onReply={()=>{setReplyTo({id:c.id,userName:c.userName});setText("");setTimeout(()=>inputRef.current?.focus({preventScroll:true}),100);}}
+                        onProfile={()=>{handleClose();setTimeout(()=>navigate(`/profile/${r.userId}`),300);}}
                         isReply/>
                     ))}
                   </div>
@@ -178,37 +170,47 @@ export default function CommentsPanel({ videoId, currentUser, onCountChange, onC
         </div>
 
         {/* Reply banner */}
-        {replyTo && (
+        {replyTo&&(
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 16px",background:T.bg1,borderTop:`1px solid ${T.border}`,flexShrink:0}}>
             <div style={{fontFamily:T.fontBody,fontSize:"13px",color:T.accent}}>↩ Replying to @{replyTo.userName}</div>
             <div style={{color:T.textMuted,cursor:"pointer",fontSize:"16px",padding:"4px 8px"}}
-              onClick={()=>{ setReplyTo(null); setText(""); }}>✕</div>
+              onClick={()=>{setReplyTo(null);setText("");}}>✕</div>
           </div>
         )}
 
-        {/* Input — always visible, sticks to bottom */}
-        <div style={{flexShrink:0,background:T.bg0,borderTop:`1px solid ${T.border}`,padding:"12px 16px",paddingBottom:keyboardH>0?"12px":"calc(16px + env(safe-area-inset-bottom,0px))"}}>
+        {/*
+          INPUT BAR — always at bottom, above keyboard.
+          This is the key fix: flexShrink:0 + the panel's bottom
+          offset moves up with the keyboard via the `bottom` style.
+        */}
+        <div style={{
+          flexShrink:0,
+          background:T.bg0,
+          borderTop:`1px solid ${T.border}`,
+          padding:"12px 16px",
+          paddingBottom: keyboardH>0 ? "12px" : "calc(16px + env(safe-area-inset-bottom,0px))",
+        }}>
           <div style={{display:"flex",alignItems:"center",gap:"10px"}}>
+            {/* Avatar */}
             {currentUser?.photoURL
-              ? <img src={currentUser.photoURL} alt="" style={{width:"34px",height:"34px",borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>
-              : <div style={{width:"34px",height:"34px",borderRadius:"50%",background:T.panel,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontDisplay,fontSize:"14px",color:T.accent,flexShrink:0}}>{currentUser?.displayName?.charAt(0)||"?"}</div>
+              ?<img src={currentUser.photoURL} alt="" style={{width:"34px",height:"34px",borderRadius:"50%",objectFit:"cover",flexShrink:0}}/>
+              :<div style={{width:"34px",height:"34px",borderRadius:"50%",background:T.panel,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontDisplay,fontSize:"14px",color:T.accent,flexShrink:0}}>{currentUser?.displayName?.charAt(0)||"?"}</div>
             }
+            {/* Input pill */}
             <div style={{flex:1,display:"flex",alignItems:"center",gap:"8px",background:T.bg1,border:`1.5px solid ${T.borderMid}`,borderRadius:T.rFull,padding:"10px 14px",boxShadow:T.shadowSm}}>
               <input
                 ref={inputRef}
                 value={text}
-                onChange={e => setText(e.target.value)}
-                placeholder={replyTo ? `Reply to @${replyTo.userName}...` : "Add a comment..."}
-                onKeyDown={e => e.key==="Enter" && post()}
+                onChange={e=>setText(e.target.value)}
+                placeholder={replyTo?`Reply to @${replyTo.userName}...`:"Add a comment..."}
+                onKeyDown={e=>e.key==="Enter"&&post()}
                 maxLength={300}
                 style={{flex:1,background:"transparent",border:"none",outline:"none",color:T.textDark,WebkitTextFillColor:T.textDark,caretColor:T.accent,fontSize:"15px",fontFamily:T.fontBody}}
               />
-              {text.trim().length > 0 && (
-                <button type="button" onClick={post} disabled={posting}
-                  style={{background:T.panel,border:"none",borderRadius:"50%",width:"30px",height:"30px",fontSize:"14px",color:T.accent,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:posting?0.5:1,flexShrink:0}}>
-                  {posting?"…":"↑"}
-                </button>
-              )}
+              <button type="button" onClick={post} disabled={posting||!text.trim()}
+                style={{background:text.trim()?T.panel:"transparent",border:text.trim()?"none":`1px solid ${T.border}`,borderRadius:"50%",width:"30px",height:"30px",fontSize:"14px",color:text.trim()?T.accent:T.textMuted,cursor:text.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",opacity:posting?0.5:1,flexShrink:0,transition:"all 0.2s"}}>
+                {posting?"…":"↑"}
+              </button>
             </div>
           </div>
         </div>
@@ -220,13 +222,13 @@ export default function CommentsPanel({ videoId, currentUser, onCountChange, onC
 function CommentRow({ c, isOwn, timeAgo, onReply, onProfile, isReply }) {
   const [liked, setLiked] = useState(false);
   const [likes, setLikes] = useState(c.likes||0);
-  const sz = isReply ? "28px" : "34px";
+  const sz = isReply?"28px":"34px";
   return (
     <div style={{display:"flex",gap:"10px",padding:"10px 0",borderBottom:`1px solid ${T.borderCard}`}}>
       <div style={{cursor:"pointer",flexShrink:0}} onClick={onProfile}>
         {c.userPhoto
-          ? <img src={c.userPhoto} alt="" style={{width:sz,height:sz,borderRadius:"50%",objectFit:"cover"}}/>
-          : <div style={{width:sz,height:sz,borderRadius:"50%",background:T.panel,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontDisplay,fontSize:isReply?"11px":"13px",color:T.accent}}>{c.userName?.charAt(0)||"?"}</div>
+          ?<img src={c.userPhoto} alt="" style={{width:sz,height:sz,borderRadius:"50%",objectFit:"cover"}}/>
+          :<div style={{width:sz,height:sz,borderRadius:"50%",background:T.panel,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontDisplay,fontSize:isReply?"11px":"13px",color:T.accent}}>{c.userName?.charAt(0)||"?"}</div>
         }
       </div>
       <div style={{flex:1,minWidth:0}}>
@@ -234,7 +236,7 @@ function CommentRow({ c, isOwn, timeAgo, onReply, onProfile, isReply }) {
           <span style={{fontFamily:T.fontBody,fontSize:"13px",fontWeight:"600",color:isOwn?T.accent:T.panel,cursor:"pointer"}} onClick={onProfile}>{isOwn?"You":c.userName}</span>
           <span style={{fontFamily:T.fontMono,fontSize:"10px",color:T.textMuted}}>{timeAgo(c.createdAt)}</span>
         </div>
-        {c.replyToName && <div style={{fontFamily:T.fontBody,fontSize:"12px",color:T.textMuted,marginBottom:"3px"}}><span style={{color:T.accent}}>@{c.replyToName}</span></div>}
+        {c.replyToName&&<div style={{fontFamily:T.fontBody,fontSize:"12px",color:T.textMuted,marginBottom:"3px"}}><span style={{color:T.accent}}>@{c.replyToName}</span></div>}
         <div style={{fontFamily:T.fontBody,fontSize:"14px",color:T.panel,lineHeight:"1.5",marginBottom:"6px",wordBreak:"break-word"}}>{c.text}</div>
         <div style={{display:"flex",alignItems:"center",gap:"16px"}}>
           <div style={{display:"flex",alignItems:"center",gap:"5px",cursor:"pointer"}}
