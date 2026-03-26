@@ -29,99 +29,72 @@ export default function Feed({ user, onBellClick }) {
   const [commentCounts, setCommentCounts] = useState({});
   const [headerVisible, setHeaderVisible] = useState(true);
 
-  const containerRef = useRef(null);
-  const touchStartY  = useRef(0);
-  const touchStartX  = useRef(0);
-  const isSwiping    = useRef(false);
-  const hideTimer    = useRef(null);
-  const idxRef       = useRef(0);
-  const lenRef       = useRef(0);
+  // ── refs ──
+const containerRef = useRef(null);
+const touchStartY  = useRef(0);
+const touchStartX  = useRef(0);
+const idxRef       = useRef(0);
+const lenRef       = useRef(0);
+const hideTimer    = useRef(null);
 
-  useEffect(() => { idxRef.current = currentIdx; }, [currentIdx]);
+// keep refs in sync with state
+useEffect(() => { idxRef.current = currentIdx; }, [currentIdx]);
+useEffect(() => { lenRef.current = filtered.length; }, [filtered.length]);
 
-  // load friends
-  useEffect(() => {
-    if (!user) return;
-    getDocs(collection(db, "users", user.uid, "friends"))
-      .then(snap => setFriendUids(new Set(snap.docs.map(d => d.id))))
-      .catch(() => {});
-  }, [user]);
+// ── header auto-hide ──
+const resetHideTimer = () => {
+  setHeaderVisible(true);
+  if (hideTimer.current) clearTimeout(hideTimer.current);
+  hideTimer.current = setTimeout(() => setHeaderVisible(false), 3000);
+};
+useEffect(() => {
+  resetHideTimer();
+  return () => { if (hideTimer.current) clearTimeout(hideTimer.current); };
+}, [currentIdx]);
 
-  // load videos
-  useEffect(() => {
-    const unsub = onSnapshot(collection(db, "videos"), snap => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) =>
-        (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0)
-      );
-      setVideos(data);
-      setLoading(false);
-    });
-    return () => unsub();
-  }, []);
+// ── touch swipe — attached directly, never recreated ──
+useEffect(() => {
+  const el = containerRef.current;
+  if (!el) return;
 
-  // filtered by tab
-  const getFiltered = () => {
-    if (activeTab === "friends") return videos.filter(v => friendUids.has(v.uploadedBy));
-    if (activeTab === "trending") {
-      return [...videos].sort((a, b) =>
-        ((b.likes || 0) + (b.comments || 0) * 2) -
-        ((a.likes || 0) + (a.comments || 0) * 2)
-      );
-    }
-    return videos;
+  let startY = 0;
+  let startX = 0;
+  let moving = false;
+
+  const onStart = e => {
+    startY = e.touches[0].clientY;
+    startX = e.touches[0].clientX;
+    moving = false;
   };
-  const filtered = getFiltered();
-  useEffect(() => { lenRef.current = filtered.length; }, [filtered.length]);
 
-  // header auto-hide
-  const resetHideTimer = useCallback(() => {
-    setHeaderVisible(true);
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(() => setHeaderVisible(false), 3000);
-  }, []);
+  const onMove = e => {
+    const dy = Math.abs(e.touches[0].clientY - startY);
+    const dx = Math.abs(e.touches[0].clientX - startX);
+    if (dy > dx) { moving = true; e.preventDefault(); }
+  };
 
-  useEffect(() => {
-    resetHideTimer();
-    return () => { if (hideTimer.current) clearTimeout(hideTimer.current); };
-  }, [currentIdx]);
+  const onEnd = e => {
+    if (!moving) return;
+    const dy = e.changedTouches[0].clientY - startY;
+    if (dy < -60 && idxRef.current < lenRef.current - 1) {
+      setCurrentIdx(i => i + 1);
+    }
+    if (dy > 60 && idxRef.current > 0) {
+      setCurrentIdx(i => i - 1);
+    }
+    moving = false;
+  };
 
-  // touch handlers
-  const onTouchStart = useCallback(e => {
-    if (showComments) return;
-    touchStartY.current = e.touches[0].clientY;
-    touchStartX.current = e.touches[0].clientX;
-    isSwiping.current   = false;
-    resetHideTimer();
-  }, [showComments, resetHideTimer]);
+  el.addEventListener("touchstart", onStart, { passive: true });
+  el.addEventListener("touchmove",  onMove,  { passive: false });
+  el.addEventListener("touchend",   onEnd,   { passive: true });
 
-  const onTouchMove = useCallback(e => {
-    if (showComments) return;
-    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
-    const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
-    if (dy > dx) { isSwiping.current = true; e.preventDefault(); }
-  }, [showComments]);
-
-  const onTouchEnd = useCallback(e => {
-    if (showComments || !isSwiping.current) return;
-    const dy = e.changedTouches[0].clientY - touchStartY.current;
-    if (dy < -50 && idxRef.current < lenRef.current - 1) setCurrentIdx(i => i + 1);
-    if (dy > 50  && idxRef.current > 0)                  setCurrentIdx(i => i - 1);
-    isSwiping.current = false;
-  }, [showComments]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    el.addEventListener("touchstart", onTouchStart, { passive: true  });
-    el.addEventListener("touchmove",  onTouchMove,  { passive: false });
-    el.addEventListener("touchend",   onTouchEnd,   { passive: true  });
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove",  onTouchMove);
-      el.removeEventListener("touchend",   onTouchEnd);
-    };
-  }, [onTouchStart, onTouchMove, onTouchEnd]);
+  return () => {
+    el.removeEventListener("touchstart", onStart);
+    el.removeEventListener("touchmove",  onMove);
+    el.removeEventListener("touchend",   onEnd);
+  };
+}, []); // ← empty array — attaches ONCE, uses local vars not stale state
 
   const switchTab = tab => { setActiveTab(tab); setCurrentIdx(0); resetHideTimer(); };
   const currentVideo = filtered[currentIdx];
