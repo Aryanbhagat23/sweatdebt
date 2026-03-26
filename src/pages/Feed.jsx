@@ -18,9 +18,7 @@ export default function Feed({ user, onBellClick }) {
   const [activeVideoId, setActiveVideoId] = useState(null);
   const [commentCounts, setCommentCounts] = useState({});
   const idxRef = useRef(idx);
-const filteredLenRef = useRef(filtered.length);
-useEffect(() => { idxRef.current = idx; }, [idx]);
-useEffect(() => { filteredLenRef.current = filtered.length; }, [filtered.length]);
+  const filteredLenRef = useRef(filtered.length);
 
   // Overlay visibility
   const [headerVisible, setHeaderVisible] = useState(true);
