@@ -17,6 +17,10 @@ export default function Feed({ user, onBellClick }) {
   const [showComments, setShowComments] = useState(false);
   const [activeVideoId, setActiveVideoId] = useState(null);
   const [commentCounts, setCommentCounts] = useState({});
+  const idxRef = useRef(idx);
+const filteredLenRef = useRef(filtered.length);
+useEffect(() => { idxRef.current = idx; }, [idx]);
+useEffect(() => { filteredLenRef.current = filtered.length; }, [filtered.length]);
 
   // Overlay visibility
   const [headerVisible, setHeaderVisible] = useState(true);
@@ -74,41 +78,43 @@ export default function Feed({ user, onBellClick }) {
   })();
 
   // Touch swipe — vertical for videos, stops propagation from comments
-  const onTouchStart = e => {
-    if (showComments) return;
-    touchStartY.current = e.touches[0].clientY;
-    touchStartX.current = e.touches[0].clientX;
-    isSwiping.current = false;
-    resetHideTimer();
-  };
+  const onTouchStart = useCallback(e => {
+  if (showComments) return;
+  touchStartY.current = e.touches[0].clientY;
+  touchStartX.current = e.touches[0].clientX;
+  isSwiping.current = false;
+  resetHideTimer();
+}, [showComments]);
 
-  const onTouchMove = e => {
-    if (showComments) return;
-    const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
-    const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
-    if (dy > dx) { isSwiping.current = true; e.preventDefault(); }
-  };
+const onTouchMove = useCallback(e => {
+  if (showComments) return;
+  const dy = Math.abs(e.touches[0].clientY - touchStartY.current);
+  const dx = Math.abs(e.touches[0].clientX - touchStartX.current);
+  if (dy > dx) { isSwiping.current = true; e.preventDefault(); }
+}, [showComments]);
 
-  const onTouchEnd = e => {
-    if (showComments || !isSwiping.current) return;
-    const dy = e.changedTouches[0].clientY - touchStartY.current;
-    if (dy < -50 && idx < filtered.length - 1) setIdx(i => i + 1);
-    if (dy > 50  && idx > 0)                   setIdx(i => i - 1);
-    isSwiping.current = false;
-  };
+const onTouchEnd = useCallback(e => {
+  if (showComments || !isSwiping.current) return;
+  const dy = e.changedTouches[0].clientY - touchStartY.current;
+  if (dy < -50 && idxRef.current < filteredLenRef.current - 1)
+    setIdx(i => i + 1);
+  if (dy > 50 && idxRef.current > 0)
+    setIdx(i => i - 1);
+  isSwiping.current = false;
+}, [showComments]);
 
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    el.addEventListener("touchstart", onTouchStart, { passive: true });
-    el.addEventListener("touchmove",  onTouchMove,  { passive: false });
-    el.addEventListener("touchend",   onTouchEnd,   { passive: true });
-    return () => {
-      el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchmove",  onTouchMove);
-      el.removeEventListener("touchend",   onTouchEnd);
-    };
-  }, [idx, filtered.length, showComments]);
+useEffect(() => {
+  const el = containerRef.current;
+  if (!el) return;
+  el.addEventListener("touchstart", onTouchStart, { passive: true });
+  el.addEventListener("touchmove",  onTouchMove,  { passive: false });
+  el.addEventListener("touchend",   onTouchEnd,   { passive: true });
+  return () => {
+    el.removeEventListener("touchstart", onTouchStart);
+    el.removeEventListener("touchmove",  onTouchMove);
+    el.removeEventListener("touchend",   onTouchEnd);
+  };
+}, [onTouchStart, onTouchMove, onTouchEnd]);
 
   const switchTab = tab => {
     setActiveTab(tab);
