@@ -7,6 +7,9 @@ import DailyChallenge from "../components/DailyChallenge";
 import LiveSportsFeed from "../components/LiveSportsFeed";
 import NotificationBell from "../components/NotificationBell";
 import NotificationCenter from "../components/NotificationCenter";
+import ChallengesBanner from "../components/ChallengesBanner";
+import DebtReminderBanner from "../components/DebtReminderBanner";
+import { GroupBetsList, CreateGroupBet } from "../components/GroupBet";
 
 // ── Countdown ────────────────────────────────────────────────
 function useCountdown(ts) {
@@ -93,6 +96,9 @@ export default function Bets({ user }) {
             </div>
           </div>
           <NotificationBell user={user} onClick={() => setNotifOpen(true)} />
+            <DebtReminderBanner bets={incomingBets} />
+    <ChallengesBanner user={user} />
+    <GroupBetsList user={user} />
         </div>
 
         {/* ── SWEAT DEBT OWED card ── */}

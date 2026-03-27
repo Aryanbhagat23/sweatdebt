@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import T from "../theme";
 import NotificationBell from "../components/NotificationBell";
 import CommentsPanel from "../components/CommentsPanel";
+import { ReactionStrip } from "../components/ReactionVideo";
 
 export default function Feed({ user, onBellClick }) {
   const navigate = useNavigate();
@@ -166,6 +167,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
   const [playing,   setPlaying]   = useState(false);
   const vidRef  = useRef(null);
   const pageRef = useRef(null);
+  
 
   // auto play when snapped into view
   useEffect(() => {
@@ -268,6 +270,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
         }}
         loop
         playsInline
+        
       />
 
       {/* play icon overlay when paused */}
@@ -341,6 +344,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
         {approved && <div style={{ background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#10b981" }}>✓ Forfeit approved! 🏆</div>}
         {disputed && <div style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#ef4444" }}>⚠ Disputed — going to jury...</div>}
       </div>
+      <ReactionStrip videoId={video.id} currentUser={currentUser} />
     </div>
   );
 }
