@@ -7,7 +7,6 @@ import { useNavigate } from "react-router-dom";
 import T from "../theme";
 import NotificationBell from "../components/NotificationBell";
 import CommentsPanel from "../components/CommentsPanel";
-import { ReactionStrip } from "../components/ReactionVideo";
 
 export default function Feed({ user, onBellClick }) {
   const navigate = useNavigate();
@@ -62,11 +61,9 @@ export default function Feed({ user, onBellClick }) {
   return (
     <div style={{ position:"relative", height:"100vh", background:"#000" }}>
 
-      {/* ── STICKY HEADER — floats above the scroll container ── */}
+      {/* STICKY HEADER */}
       <div style={{
-        position:"absolute",
-        top:0, left:0, right:0,
-        zIndex:200,
+        position:"absolute", top:0, left:0, right:0, zIndex:200,
         background:"linear-gradient(to bottom, rgba(5,46,22,0.92) 0%, rgba(5,46,22,0.5) 70%, transparent 100%)",
         paddingTop:"env(safe-area-inset-top, 0px)",
         pointerEvents:"auto",
@@ -82,7 +79,7 @@ export default function Feed({ user, onBellClick }) {
               { key:"trending", label:"🔥 Hot"  },
             ].map(t => (
               <button key={t.key} type="button"
-                onClick={() => setActiveTab(t.key)}
+                onClick={() => { setActiveTab(t.key); }}
                 style={{
                   background: activeTab === t.key ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.08)",
                   border: activeTab === t.key ? "1px solid rgba(255,255,255,0.5)" : "1px solid rgba(255,255,255,0.15)",
@@ -97,26 +94,22 @@ export default function Feed({ user, onBellClick }) {
               >{t.label}</button>
             ))}
           </div>
-          <div style={{ flexShrink:0 }}>
+          {/* Notification bell — stop propagation so it works */}
+          <div style={{ flexShrink:0 }} onClick={e => { e.stopPropagation(); onBellClick?.(); }}>
             <NotificationBell user={user} onClick={onBellClick} light />
           </div>
         </div>
       </div>
 
-      {/* ── SCROLL SNAP CONTAINER ──
-          height: 100vh, overflow-y: scroll, snap-type: y mandatory
-          This is the key — one scroll = one video
-      ── */}
+      {/* SCROLL SNAP CONTAINER */}
       <div style={{
         height:"100vh",
         overflowY:"scroll",
         scrollSnapType:"y mandatory",
         WebkitOverflowScrolling:"touch",
-        /* hide scrollbar */
         scrollbarWidth:"none",
         msOverflowStyle:"none",
       }}>
-        <style>{`.feed-scroll::-webkit-scrollbar{display:none}`}</style>
 
         {filtered.length === 0 ? (
           <div style={{ height:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"12px", scrollSnapAlign:"start" }}>
@@ -155,33 +148,22 @@ export default function Feed({ user, onBellClick }) {
   );
 }
 
-/* ─────────────────────────────────────────
-   REEL PAGE — each one snaps to full screen
-───────────────────────────────────────── */
 function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount }) {
   const [liked,     setLiked]     = useState(false);
   const [likes,     setLikes]     = useState(video.likes || 0);
   const [approved,  setApproved]  = useState(video.approved || false);
   const [disputed,  setDisputed]  = useState(video.disputed || false);
   const [approving, setApproving] = useState(false);
-  const [playing,   setPlaying]   = useState(false);
   const vidRef  = useRef(null);
   const pageRef = useRef(null);
-  
 
-  // auto play when snapped into view
   useEffect(() => {
     const el = pageRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) {
-          vidRef.current?.play().catch(() => {});
-          setPlaying(true);
-        } else {
-          vidRef.current?.pause();
-          setPlaying(false);
-        }
+        if (entry.isIntersecting) vidRef.current?.play().catch(() => {});
+        else try { vidRef.current?.pause(); } catch(e) {}
       },
       { threshold: 0.8 }
     );
@@ -189,17 +171,9 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
     return () => observer.disconnect();
   }, []);
 
-  const togglePlay = () => {
-    const v = vidRef.current;
-    if (!v) return;
-    if (v.paused) { v.play().catch(()=>{}); setPlaying(true); }
-    else          { v.pause(); setPlaying(false); }
-  };
-
   const handleLike = async () => {
     const next = !liked;
-    setLiked(next);
-    setLikes(l => next ? l + 1 : l - 1);
+    setLiked(next); setLikes(l => next ? l+1 : l-1);
     try { await updateDoc(doc(db,"videos",video.id), { likes: increment(next?1:-1) }); } catch(e) {}
   };
 
@@ -240,51 +214,17 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
   );
 
   return (
-    <div
-      ref={pageRef}
-      style={{
-        position:"relative",
-        height:"100vh",
-        width:"100%",
-        /* THE KEY LINE — snap each item to start */
-        scrollSnapAlign:"start",
-        scrollSnapStop:"always",
-        overflow:"hidden",
-        background:"#000",
-        display:"flex",
-        alignItems:"center",
-        justifyContent:"center",
-      }}
-    >
-      {/* VIDEO */}
-      <video
-        ref={vidRef}
-        src={video.videoUrl}
-        onClick={togglePlay}
-        style={{
-          width:"100%",
-          height:"100%",
-          objectFit:"contain",   /* centred, letterboxed for horizontal videos */
-          display:"block",
-          cursor:"pointer",
-        }}
-        loop
-        playsInline
-        
+    <div ref={pageRef} style={{
+      position:"relative", height:"100vh", width:"100%",
+      scrollSnapAlign:"start", scrollSnapStop:"always",
+      overflow:"hidden", background:"#000",
+      display:"flex", alignItems:"center", justifyContent:"center",
+    }}>
+      <video ref={vidRef} src={video.videoUrl}
+        style={{ width:"100%", height:"100%", objectFit:"contain", display:"block", cursor:"pointer" }}
+        loop playsInline
+        onClick={() => { const v=vidRef.current; if(!v) return; v.paused?v.play().catch(()=>{}):v.pause(); }}
       />
-
-      {/* play icon overlay when paused */}
-      {!playing && (
-        <div style={{
-          position:"absolute",
-          width:"64px", height:"64px",
-          borderRadius:"50%",
-          background:"rgba(0,0,0,0.5)",
-          display:"flex", alignItems:"center", justifyContent:"center",
-          fontSize:"26px",
-          pointerEvents:"none",
-        }}>▶</div>
-      )}
 
       {/* bottom gradient */}
       <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"55%", background:"linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.25) 65%, transparent 100%)", pointerEvents:"none" }}/>
@@ -297,20 +237,15 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
       </div>
 
       {/* right side buttons */}
-      <div style={{
-        position:"absolute", right:"12px", bottom:"180px",
-        display:"flex", flexDirection:"column", alignItems:"center", gap:"20px",
-        zIndex:10,
-      }}>
-        <SideBtn icon={liked?"❤️":"🤍"} count={likes}        label="Like"    onClick={handleLike} />
-        <SideBtn icon="💬"               count={commentCount} label="Comment" onClick={onCommentOpen} />
-        <SideBtn icon="↗"               count={null}         label="Share"   onClick={handleShare} />
-        <SideBtn icon="⚔️"              count={null}         label="Bet"     onClick={() => onNavigate("/create")} />
+      <div style={{ position:"absolute", right:"12px", bottom:"180px", display:"flex", flexDirection:"column", alignItems:"center", gap:"20px", zIndex:10 }}>
+        <SBtn icon={liked?"❤️":"🤍"} count={likes}        label="Like"    onClick={handleLike} />
+        <SBtn icon="💬"               count={commentCount} label="Comment" onClick={e=>{ e.stopPropagation(); onCommentOpen(); }} />
+        <SBtn icon="↗"               count={null}         label="Share"   onClick={handleShare} />
+        <SBtn icon="⚔️"              count={null}         label="Bet"     onClick={()=>onNavigate("/create")} />
       </div>
 
       {/* bottom info */}
       <div style={{ position:"absolute", bottom:"80px", left:"14px", right:"72px", zIndex:10 }}>
-        {/* user row */}
         <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"10px", cursor:"pointer" }}
           onClick={() => onNavigate(`/profile/${video.uploadedBy}`)}>
           {video.uploaderPhoto
@@ -323,7 +258,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
             <div style={{ fontFamily:T.fontBody, fontSize:"14px", fontWeight:"600", color:"#fff" }}>
               @{(video.uploadedByName||"user").toLowerCase().replace(/\s/g,"")}
             </div>
-            <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:"rgba(255,255,255,0.5)" }}>
+            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:"rgba(255,255,255,0.5)" }}>
               {ago(video.createdAt)}
             </div>
           </div>
@@ -344,13 +279,11 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
         {approved && <div style={{ background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#10b981" }}>✓ Forfeit approved! 🏆</div>}
         {disputed && <div style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#ef4444" }}>⚠ Disputed — going to jury...</div>}
       </div>
-      <ReactionStrip videoId={video.id} currentUser={currentUser} />
     </div>
   );
 }
 
-/* ── helpers ── */
-function SideBtn({ icon, count, label, onClick }) {
+function SBtn({ icon, count, label, onClick }) {
   const [p, setP] = useState(false);
   return (
     <div
@@ -359,13 +292,13 @@ function SideBtn({ icon, count, label, onClick }) {
       onClick={onClick}
       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"3px", cursor:"pointer", transform:p?"scale(0.88)":"scale(1)", transition:"transform 0.15s cubic-bezier(0.34,1.56,0.64,1)" }}
     >
-      <div style={{ width:"46px", height:"46px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"20px", color:"aqua" }}>
+      <div style={{ width:"46px", height:"46px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.22)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"20px" }}>
         {icon}
       </div>
       {count !== null && count !== undefined && (
-        <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:"rgba(255,255,255,0.9)", fontWeight:"500" }}>{count}</div>
+        <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:"rgba(255,255,255,0.9)", fontWeight:"500" }}>{count}</div>
       )}
-      <div style={{ fontFamily:T.fontMono, fontSize:"9px", color:"rgba(255,255,255,0.45)", letterSpacing:"0.05em" }}>{label.toUpperCase()}</div>
+      <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"9px", color:"rgba(255,255,255,0.45)", letterSpacing:"0.05em" }}>{label.toUpperCase()}</div>
     </div>
   );
 }

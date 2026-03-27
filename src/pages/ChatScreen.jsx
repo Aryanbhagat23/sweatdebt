@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { db } from "../firebase";
 import {
   doc, onSnapshot, collection, query,
-  orderBy, addDoc, updateDoc, serverTimestamp,
+  orderBy, addDoc, updateDoc, setDoc, serverTimestamp,
 } from "firebase/firestore";
 import T from "../theme";
 
@@ -15,80 +15,99 @@ export default function ChatScreen({ user }) {
   const [messages, setMessages] = useState([]);
   const [text,     setText]     = useState("");
   const [sending,  setSending]  = useState(false);
+  const [loading,  setLoading]  = useState(true);
   const bottomRef  = useRef(null);
   const inputRef   = useRef(null);
 
-  // Load conversation
+  // Load conversation — create it if missing
   useEffect(() => {
-    if (!convoId) return;
-    const unsub = onSnapshot(doc(db,"conversations",convoId), snap => {
-      if (snap.exists()) setConvo({ id:snap.id, ...snap.data() });
+    if (!convoId || !user) return;
+    const unsub = onSnapshot(doc(db, "conversations", convoId), async snap => {
+      if (snap.exists()) {
+        setConvo({ id:snap.id, ...snap.data() });
+      } else {
+        // Conversation doesn't exist yet — create it
+        const uids = convoId.split("_");
+        await setDoc(doc(db, "conversations", convoId), {
+          participants:      uids,
+          participantNames:  { [user.uid]: user.displayName },
+          participantPhotos: { [user.uid]: user.photoURL || null },
+          lastMessage:       "",
+          lastMessageAt:     serverTimestamp(),
+          unreadCount:       Object.fromEntries(uids.map(u => [u, 0])),
+          createdAt:         serverTimestamp(),
+        });
+      }
+      setLoading(false);
     });
     return () => unsub();
-  }, [convoId]);
+  }, [convoId, user]);
 
   // Load messages
   useEffect(() => {
     if (!convoId) return;
-    const q = query(collection(db,"conversations",convoId,"messages"), orderBy("createdAt","asc"));
+    const q = query(
+      collection(db, "conversations", convoId, "messages"),
+      orderBy("createdAt", "asc")
+    );
     const unsub = onSnapshot(q, snap => {
-      setMessages(snap.docs.map(d=>({id:d.id,...d.data()})));
-      setTimeout(()=>bottomRef.current?.scrollIntoView({behavior:"smooth"}),100);
+      setMessages(snap.docs.map(d => ({ id:d.id, ...d.data() })));
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior:"smooth" }), 100);
     });
     return () => unsub();
   }, [convoId]);
 
-  // Mark as read
+  // Mark read
   useEffect(() => {
-    if (!convoId||!user) return;
-    updateDoc(doc(db,"conversations",convoId),{
+    if (!convoId || !user) return;
+    updateDoc(doc(db, "conversations", convoId), {
       [`unreadCount.${user.uid}`]: 0,
-    }).catch(()=>{});
+    }).catch(() => {});
   }, [convoId, user, messages.length]);
 
   const send = async () => {
-    if (!text.trim()||sending) return;
+    if (!text.trim() || sending) return;
     setSending(true);
     const t = text.trim();
     setText("");
     try {
-      const otherUid = convo?.participants?.find(p=>p!==user.uid);
-      await addDoc(collection(db,"conversations",convoId,"messages"),{
+      const otherUid = convo?.participants?.find(p => p !== user.uid);
+      await addDoc(collection(db, "conversations", convoId, "messages"), {
         type:        "text",
         text:        t,
         senderId:    user.uid,
         senderName:  user.displayName,
-        senderPhoto: user.photoURL||null,
+        senderPhoto: user.photoURL || null,
         createdAt:   serverTimestamp(),
         read:        false,
       });
-      await updateDoc(doc(db,"conversations",convoId),{
+      await updateDoc(doc(db, "conversations", convoId), {
         lastMessage:   t,
         lastMessageAt: serverTimestamp(),
-        [`unreadCount.${otherUid}`]: 1,
+        ...(otherUid ? { [`unreadCount.${otherUid}`]: 1 } : {}),
       });
     } catch(e) { console.error(e); setText(t); }
     setSending(false);
   };
 
-  const otherUid  = convo?.participants?.find(p=>p!==user?.uid);
-  const otherName = convo?.participantNames?.[otherUid] || "Chat";
+  const otherUid   = convo?.participants?.find(p => p !== user?.uid);
+  const otherName  = convo?.participantNames?.[otherUid] || "Chat";
   const otherPhoto = convo?.participantPhotos?.[otherUid] || null;
 
   const timeStr = ts => {
     if (!ts?.toDate) return "";
-    const d = ts.toDate();
-    return d.toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+    return ts.toDate().toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" });
   };
 
-  const QUICK_REPLIES = ["😂","🔥","Let's go!","gg","You're on!","No chance 😤"];
+  const QUICK = ["😂","🔥","Let's go!","gg","You're on!","No chance 😤"];
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100vh", background:T.bg0 }}>
+      <style>{`@keyframes _sp{to{transform:rotate(360deg)}}`}</style>
 
       {/* Header */}
       <div style={{ background:T.panel, padding:"52px 16px 14px", display:"flex", alignItems:"center", gap:"12px", borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
-        <button type="button" onClick={()=>navigate(-1)}
+        <button type="button" onClick={() => navigate(-1)}
           style={{ background:T.bg1, border:`1px solid ${T.borderCard}`, borderRadius:"50%", width:"40px", height:"40px", color:T.panel, fontSize:"18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
           ←
         </button>
@@ -100,11 +119,10 @@ export default function ChatScreen({ user }) {
         }
         <div style={{ flex:1 }}>
           <div style={{ fontFamily:T.fontBody, fontSize:"16px", fontWeight:"600", color:"#fff" }}>{otherName}</div>
-          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:T.accent, opacity:0.8 }}>tap to view profile</div>
+          <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:T.accent, opacity:0.8 }}>SweatDebt chat</div>
         </div>
-        {/* Challenge button */}
         <button type="button"
-          onClick={()=>navigate("/create",{state:{opponent:{email:convo?.participantNames?.[otherUid]||"",displayName:otherName,uid:otherUid}}})}
+          onClick={() => navigate("/create", { state:{ opponent:{ email:"", displayName:otherName, uid:otherUid } } })}
           style={{ background:T.accent, border:"none", borderRadius:"12px", padding:"8px 14px", fontFamily:T.fontDisplay, fontSize:"14px", letterSpacing:"0.04em", color:"#052e16", cursor:"pointer", flexShrink:0 }}>
           ⚔️ BET
         </button>
@@ -112,7 +130,13 @@ export default function ChatScreen({ user }) {
 
       {/* Messages */}
       <div style={{ flex:1, overflowY:"auto", padding:"16px", display:"flex", flexDirection:"column", gap:"8px" }}>
-        {messages.length===0 && (
+        {loading && (
+          <div style={{ display:"flex", justifyContent:"center", padding:"48px" }}>
+            <div style={{ width:"24px", height:"24px", borderRadius:"50%", border:`3px solid ${T.border}`, borderTop:`3px solid ${T.accent}`, animation:"_sp 0.8s linear infinite" }}/>
+          </div>
+        )}
+
+        {!loading && messages.length === 0 && (
           <div style={{ textAlign:"center", padding:"48px 20px" }}>
             <div style={{ fontSize:"40px", marginBottom:"12px" }}>👋</div>
             <div style={{ fontFamily:T.fontBody, fontSize:"15px", color:T.textMuted }}>
@@ -123,34 +147,33 @@ export default function ChatScreen({ user }) {
 
         {messages.map((msg, i) => {
           const isMe = msg.senderId === user?.uid;
-          const showTime = i===0 || (messages[i-1]?.createdAt?.toDate?.() &&
-            msg.createdAt?.toDate?.() - messages[i-1].createdAt.toDate() > 300000);
+          const showTime = i === 0 || (
+            msg.createdAt?.toDate?.() && messages[i-1]?.createdAt?.toDate?.() &&
+            msg.createdAt.toDate() - messages[i-1].createdAt.toDate() > 300000
+          );
 
-          // ── Challenge card message ──
+          // Challenge card
           if (msg.type === "challenge") {
             return (
               <div key={msg.id}>
                 {showTime && <TimeLabel ts={msg.createdAt} />}
-                <ChallengeCard
-                  msg={msg}
-                  isMe={isMe}
-                  onAccept={()=>navigate(`/upload/${msg.betId}`)}
-                  onViewBet={()=>navigate("/bets")}
-                />
+                <ChallengeCard msg={msg} isMe={isMe}
+                  onAccept={() => navigate(`/upload/${msg.betId}`)}
+                  onView={() => navigate("/bets")} />
               </div>
             );
           }
 
-          // ── Regular text message ──
+          // Regular message
           return (
             <div key={msg.id}>
               {showTime && <TimeLabel ts={msg.createdAt} />}
-              <div style={{ display:"flex", justifyContent: isMe?"flex-end":"flex-start", alignItems:"flex-end", gap:"8px" }}>
+              <div style={{ display:"flex", justifyContent:isMe?"flex-end":"flex-start", alignItems:"flex-end", gap:"8px" }}>
                 {!isMe && (
                   msg.senderPhoto
                     ? <img src={msg.senderPhoto} alt="" style={{ width:"28px", height:"28px", borderRadius:"50%", objectFit:"cover", flexShrink:0, marginBottom:"2px" }}/>
                     : <div style={{ width:"28px", height:"28px", borderRadius:"50%", background:T.panel, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.fontDisplay, fontSize:"12px", color:T.accent, flexShrink:0, marginBottom:"2px" }}>
-                        {msg.senderName?.charAt(0)||"?"}
+                        {(msg.senderName||"?").charAt(0)}
                       </div>
                 )}
                 <div style={{ maxWidth:"72%" }}>
@@ -159,9 +182,7 @@ export default function ChatScreen({ user }) {
                     color:      isMe ? "#052e16" : T.panel,
                     borderRadius: isMe ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
                     padding:"10px 14px",
-                    fontFamily:T.fontBody,
-                    fontSize:"15px",
-                    lineHeight:"1.5",
+                    fontFamily:T.fontBody, fontSize:"15px", lineHeight:"1.5",
                     border: isMe ? "none" : `1px solid ${T.borderCard}`,
                   }}>
                     {msg.text}
@@ -179,8 +200,8 @@ export default function ChatScreen({ user }) {
 
       {/* Quick replies */}
       <div style={{ display:"flex", gap:"6px", padding:"0 16px 8px", overflowX:"auto", flexShrink:0 }}>
-        {QUICK_REPLIES.map(q=>(
-          <button key={q} type="button" onClick={()=>setText(q)}
+        {QUICK.map(q => (
+          <button key={q} type="button" onClick={() => { setText(q); inputRef.current?.focus(); }}
             style={{ flexShrink:0, background:T.bg1, border:`1px solid ${T.borderCard}`, borderRadius:"20px", padding:"6px 14px", fontFamily:T.fontBody, fontSize:"13px", color:T.textMuted, cursor:"pointer", whiteSpace:"nowrap" }}>
             {q}
           </button>
@@ -199,8 +220,8 @@ export default function ChatScreen({ user }) {
           <input
             ref={inputRef}
             value={text}
-            onChange={e=>setText(e.target.value)}
-            onKeyDown={e=>e.key==="Enter"&&send()}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && send()}
             placeholder="Message..."
             maxLength={500}
             style={{ flex:1, background:"transparent", border:"none", outline:"none", color:T.panel, fontSize:"15px", fontFamily:T.fontBody, WebkitTextFillColor:T.panel, caretColor:T.accent }}
@@ -217,47 +238,36 @@ export default function ChatScreen({ user }) {
   );
 }
 
-/* ── Challenge card — renders in chat ── */
-function ChallengeCard({ msg, isMe, onAccept, onViewBet }) {
+function ChallengeCard({ msg, isMe, onAccept, onView }) {
   return (
-    <div style={{ display:"flex", justifyContent: isMe?"flex-end":"flex-start" }}>
+    <div style={{ display:"flex", justifyContent:isMe?"flex-end":"flex-start", marginBottom:"4px" }}>
       <div style={{ maxWidth:"85%", background:T.bg1, border:`2px solid ${T.accent}40`, borderRadius:"20px", overflow:"hidden" }}>
-        {/* Header strip */}
         <div style={{ background:T.panel, padding:"8px 14px", display:"flex", alignItems:"center", gap:"8px" }}>
           <span style={{ fontSize:"16px" }}>⚔️</span>
           <span style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", fontWeight:"700", color:T.accent, letterSpacing:"0.1em" }}>
             {isMe ? "YOU CHALLENGED THEM" : "YOU'VE BEEN CHALLENGED!"}
           </span>
         </div>
-
-        {/* Body */}
         <div style={{ padding:"12px 14px" }}>
-          {/* Bet description */}
           <div style={{ fontFamily:T.fontBody, fontSize:"14px", color:T.panel, fontWeight:"600", marginBottom:"10px", lineHeight:"1.4" }}>
             "{msg.betDescription}"
           </div>
-
-          {/* Forfeit detail */}
           <div style={{ background:T.bg0, borderRadius:"10px", padding:"10px 12px", marginBottom:"12px", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <span style={{ fontFamily:"'DM Mono',monospace", fontSize:"10px", color:T.textMuted, letterSpacing:"0.08em" }}>FORFEIT IF LOST</span>
             <span style={{ fontFamily:T.fontDisplay, fontSize:"18px", color:"#f97316", letterSpacing:"0.04em" }}>
               {msg.forfeitIcon} {msg.reps} {msg.forfeitName}
             </span>
           </div>
-
-          {/* Deadline */}
           <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:T.textMuted, marginBottom:"12px" }}>
-            ⏱ {msg.deadlineHours}h to complete after accepted
+            ⏱ {msg.deadlineHours}h deadline after accepted
           </div>
-
-          {/* Action buttons */}
           {!isMe ? (
             <div style={{ display:"flex", gap:"8px" }}>
               <button type="button" onClick={onAccept}
                 style={{ flex:1, padding:"11px", background:T.accent, border:"none", borderRadius:"12px", fontFamily:T.fontDisplay, fontSize:"16px", letterSpacing:"0.04em", color:"#052e16", cursor:"pointer" }}>
                 ✓ ACCEPT
               </button>
-              <button type="button" onClick={onViewBet}
+              <button type="button" onClick={onView}
                 style={{ flex:1, padding:"11px", background:"transparent", border:`1px solid ${T.border}`, borderRadius:"12px", fontFamily:T.fontDisplay, fontSize:"16px", letterSpacing:"0.04em", color:T.textMuted, cursor:"pointer" }}>
                 VIEW BET
               </button>
@@ -275,12 +285,10 @@ function ChallengeCard({ msg, isMe, onAccept, onViewBet }) {
 
 function TimeLabel({ ts }) {
   if (!ts?.toDate) return null;
-  const d = ts.toDate();
-  const now = new Date();
-  const isToday = d.toDateString()===now.toDateString();
-  const label = isToday
-    ? d.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})
-    : d.toLocaleDateString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"});
+  const d = ts.toDate(), now = new Date();
+  const label = d.toDateString() === now.toDateString()
+    ? d.toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" })
+    : d.toLocaleDateString([], { month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" });
   return (
     <div style={{ textAlign:"center", margin:"8px 0", fontFamily:"'DM Mono',monospace", fontSize:"10px", color:T.textMuted }}>
       {label}
