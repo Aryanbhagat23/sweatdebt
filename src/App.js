@@ -24,7 +24,7 @@ import GroupBets       from "./pages/GroupBets";
 import CreateGroupBet  from "./pages/CreateGroupBet";
 import GroupBetRoom    from "./pages/GroupBetRoom";
 import Seasons from "./pages/Seasons";
-import UserProfile from "./pages/UserProfile";
+
 
 // Desktop-safe fixed nav — stays within the 480px column on wide screens
 function NavBar({ user, livePhoto, unreadDMs, onProfileOpen }) {
