@@ -24,6 +24,7 @@ import GroupBets       from "./pages/GroupBets";
 import CreateGroupBet  from "./pages/CreateGroupBet";
 import GroupBetRoom    from "./pages/GroupBetRoom";
 import Seasons from "./pages/Seasons";
+import UserProfile from "./pages/UserProfile";
 
 // Desktop-safe fixed nav — stays within the 480px column on wide screens
 function NavBar({ user, livePhoto, unreadDMs, onProfileOpen }) {
@@ -116,6 +117,8 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
 <Route path="/group-bets/:id"        element={<GroupBetRoom user={user}/>}/>
 <Route path="/create-group-bet"      element={<CreateGroupBet user={user}/>}/>
 <Route path="/seasons" element={<Seasons user={user}/>}/>
+<Route path="/profile/:userId" element={<UserProfile user={user}/>}/>
+<Route path="/profile"         element={<UserProfile user={user}/>}/>
       </Routes>
       <NavBar user={user} livePhoto={livePhoto} unreadDMs={unreadDMs} onProfileOpen={()=>setProfileOpen(true)}/>
       <ProfileOverlay user={user} isOpen={profileOpen} onClose={()=>setProfileOpen(false)}/>

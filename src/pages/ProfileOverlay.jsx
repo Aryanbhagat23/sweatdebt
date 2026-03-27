@@ -55,6 +55,7 @@ export default function ProfileOverlay({ user, isOpen, onClose }) {
           { icon:"👤", label:"View Profile",  action: () => { navigate(`/profile/${user.uid}`); onClose(); } },
           { icon:"✏️", label:"Edit Profile",  action: () => { navigate("/edit-profile");        onClose(); } },
           { icon:"👥", label:"Find Friends",  action: () => { navigate("/friends");             onClose(); } },
+          <Row icon="👤" label="View Profile" onClick={() => goTo(`/profile/${user.uid}`)} right={<div>›</div>}/>
         ].map(item => (
           <div key={item.label} style={{ display:"flex", alignItems:"center", gap:"14px", padding:"14px 20px", cursor:"pointer" }} onClick={item.action}>
             <div style={{ width:"40px", height:"40px", borderRadius:T.r12, background:T.bg3, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"20px" }}>{item.icon}</div>
