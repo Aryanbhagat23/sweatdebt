@@ -20,11 +20,15 @@ import InboxScreen      from "./pages/InboxScreen";
 import ChatScreen       from "./pages/ChatScreen";
 import NewChat          from "./pages/NewChat";
 import NotificationCenter from "./components/NotificationCenter";
+import GroupBets       from "./pages/GroupBets";
+import CreateGroupBet  from "./pages/CreateGroupBet";
+import GroupBetRoom    from "./pages/GroupBetRoom";
+import Seasons from "./pages/Seasons";
 
 // Desktop-safe fixed nav — stays within the 480px column on wide screens
 function NavBar({ user, livePhoto, unreadDMs, onProfileOpen }) {
   const location = useLocation();
-  const hide = ["/create","/upload","/edit-profile","/friends","/profile/","/inbox/"]
+  const hide = ["/create","/upload","/edit-profile","/friends","/profile/","/inbox/","/create-group-bet", "/group-bets/"]
     .some(p => location.pathname.startsWith(p));
   if (hide) return null;
 
@@ -108,6 +112,10 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
         <Route path="/inbox"                 element={<InboxScreen user={user}/>}/>
         <Route path="/inbox/new"             element={<NewChat user={user}/>}/>
         <Route path="/inbox/:conversationId" element={<ChatScreen user={user}/>}/>
+        <Route path="/group-bets"            element={<GroupBets user={user}/>}/>
+<Route path="/group-bets/:id"        element={<GroupBetRoom user={user}/>}/>
+<Route path="/create-group-bet"      element={<CreateGroupBet user={user}/>}/>
+<Route path="/seasons" element={<Seasons user={user}/>}/>
       </Routes>
       <NavBar user={user} livePhoto={livePhoto} unreadDMs={unreadDMs} onProfileOpen={()=>setProfileOpen(true)}/>
       <ProfileOverlay user={user} isOpen={profileOpen} onClose={()=>setProfileOpen(false)}/>

@@ -292,7 +292,7 @@ function SBtn({ icon, count, label, onClick }) {
       onClick={onClick}
       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"3px", cursor:"pointer", transform:p?"scale(0.88)":"scale(1)", transition:"transform 0.15s cubic-bezier(0.34,1.56,0.64,1)" }}
     >
-      <div style={{ width:"46px", height:"46px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.22)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"20px" }}>
+      <div style={{ width:"46px", height:"46px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.22)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"20px", color: "aqua" }}>
         {icon}
       </div>
       {count !== null && count !== undefined && (
