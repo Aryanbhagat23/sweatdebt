@@ -1,150 +1,194 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { db } from "../firebase";
-import { doc, getDoc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, db } from "../firebase";
+import { updateProfile } from "firebase/auth";
+import { doc, getDoc, updateDoc, setDoc } from "firebase/firestore";
 import T from "../theme";
 
-const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/daf3vs5n6/image/upload";
-const UPLOAD_PRESET  = "jrmodcfe";
+const C = {
+  page:"#f0fdf4", card:"#ffffff", border:"#d1fae5",
+  heading:"#052e16", muted:"#6b7280", accent:"#10b981",
+};
+
+const CLOUDINARY_CLOUD = "daf3vs5n6";
+const CLOUDINARY_PRESET = "jrmodcfe";
 
 export default function EditProfile({ user }) {
   const navigate = useNavigate();
-  const [name,         setName]         = useState(user?.displayName||"");
-  const [username,     setUsername]     = useState("");
-  const [bio,          setBio]          = useState("");
-  const [photoURL,     setPhotoURL]     = useState(user?.photoURL||null);
-  const [photoFile,    setPhotoFile]    = useState(null);
-  const [photoPreview, setPhotoPreview] = useState(null);
-  const [loading,      setLoading]      = useState(false);
-  const [fetching,     setFetching]     = useState(true);
-  const [error,        setError]        = useState("");
-  const [saved,        setSaved]        = useState(false);
 
+  const [displayName, setDisplayName] = useState("");
+  const [username,    setUsername]    = useState("");
+  const [bio,         setBio]         = useState("");
+  const [photoURL,    setPhotoURL]    = useState("");
+  const [uploading,   setUploading]   = useState(false);
+  const [saving,      setSaving]      = useState(false);
+  const [saved,       setSaved]       = useState(false);
+  const [error,       setError]       = useState("");
+
+  /* load existing profile */
   useEffect(() => {
     if (!user) return;
     getDoc(doc(db,"users",user.uid)).then(snap => {
       if (snap.exists()) {
         const d = snap.data();
-        setUsername(d.username||"");
-        setBio(d.bio||"");
-        setPhotoURL(d.photoURL||user.photoURL||null);
+        setDisplayName(d.displayName || user.displayName || "");
+        setUsername(d.username    || "");
+        setBio(d.bio              || "");
+        setPhotoURL(d.photoURL    || user.photoURL || "");
+      } else {
+        setDisplayName(user.displayName || "");
+        setPhotoURL(user.photoURL       || "");
       }
-      setFetching(false);
-    }).catch(() => setFetching(false));
+    });
   }, [user]);
 
-  const save = async () => {
-    if (!name.trim()) { setError("Name is required"); return; }
-    setLoading(true); setError("");
+  /* upload photo to Cloudinary */
+  const handlePhotoChange = async e => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setError("");
     try {
-      let newPhotoURL = photoURL;
-
-      if (photoFile) {
-        // Upload to Cloudinary
-        const fd = new FormData();
-        fd.append("file", photoFile);
-        fd.append("upload_preset", UPLOAD_PRESET);
-
-        const res = await fetch(CLOUDINARY_URL, { method: "POST", body: fd });
-        if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
-        const data = await res.json();
-        if (data.error) throw new Error(data.error.message);
-        newPhotoURL = data.secure_url;
-      }
-
-      const lower = username.toLowerCase().trim();
-
-      await updateDoc(doc(db,"users",user.uid), {
-        displayName: name.trim(),
-        username:    lower,
-        bio:         bio.trim(),
-        photoURL:    newPhotoURL,
-        updatedAt:   serverTimestamp(),
-      });
-
-      if (lower) {
-        await setDoc(doc(db,"usernames",lower), { uid: user.uid }, { merge: true });
-      }
-
-      setSaved(true);
-      setTimeout(() => navigate(-1), 1200);
-    } catch(e) {
-      console.error(e);
-      setError(e.message || "Save failed. Please try again.");
-    }
-    setLoading(false);
+      const form = new FormData();
+      form.append("file", file);
+      form.append("upload_preset", CLOUDINARY_PRESET);
+      const res  = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method:"POST", body:form });
+      const data = await res.json();
+      if (data.secure_url) setPhotoURL(data.secure_url);
+      else setError("Photo upload failed. Try again.");
+    } catch(e) { setError("Photo upload failed."); }
+    setUploading(false);
   };
 
-  if (fetching) return (
-    <div style={{minHeight:"100vh",background:T.bg0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{width:"32px",height:"32px",borderRadius:"50%",border:`3px solid ${T.border}`,borderTop:`3px solid ${T.accent}`,animation:"spin 0.8s linear infinite"}}/>
-    </div>
-  );
+  /* save — writes to BOTH Firestore AND Firebase Auth */
+  const handleSave = async () => {
+    if (!displayName.trim()) { setError("Name can't be empty"); return; }
+    setSaving(true);
+    setError("");
+    try {
+      /* 1. Update Firebase Auth profile — this fixes the name bug */
+      await updateProfile(auth.currentUser, {
+        displayName: displayName.trim(),
+        photoURL:    photoURL || null,
+      });
+
+      /* 2. Update Firestore user doc */
+      const userRef = doc(db,"users",user.uid);
+      await setDoc(userRef, {
+        displayName: displayName.trim(),
+        username:    username.trim().toLowerCase().replace(/\s/g,"") || displayName.trim().toLowerCase().replace(/\s/g,""),
+        bio:         bio.trim(),
+        photoURL:    photoURL || null,
+        email:       user.email || null,
+        updatedAt:   new Date(),
+      }, { merge:true });
+
+      setSaved(true);
+      setTimeout(() => { setSaved(false); navigate(-1); }, 1200);
+    } catch(e) {
+      console.error("Save error:", e);
+      setError("Failed to save. Try again.");
+    }
+    setSaving(false);
+  };
 
   return (
-    <div style={{minHeight:"100vh",background:T.bg0,paddingBottom:"40px"}}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    <div style={{ minHeight:"100vh", background:C.page, paddingBottom:"40px" }}>
 
-      {/* Header */}
-      <div style={{display:"flex",alignItems:"center",gap:"12px",padding:"52px 16px 20px"}}>
-        <button onClick={()=>navigate(-1)} style={{background:T.bg1,border:`1px solid ${T.border}`,borderRadius:"50%",width:"44px",height:"44px",color:T.panel,fontSize:"20px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:T.shadowSm}}>←</button>
-        <div style={{fontFamily:T.fontDisplay,fontSize:"28px",color:T.panel,letterSpacing:"0.04em",fontStyle:"italic",flex:1}}>Edit <span style={{color:T.accent}}>Profile</span></div>
+      {/* header */}
+      <div style={{ display:"flex", alignItems:"center", gap:"12px", padding:"52px 16px 20px", borderBottom:`1px solid ${C.border}`, background:C.card }}>
+        <button type="button" onClick={()=>navigate(-1)}
+          style={{ width:"44px", height:"44px", borderRadius:"50%", background:C.page, border:`1px solid ${C.border}`, color:C.heading, fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          ←
+        </button>
+        <div style={{ flex:1, fontFamily:"monospace", fontSize:"13px", color:C.muted, letterSpacing:"0.08em", textTransform:"uppercase" }}>
+          Edit Profile
+        </div>
+        <button type="button" onClick={handleSave} disabled={saving||uploading}
+          style={{ padding:"10px 20px", background:saving?C.page:C.heading, border:"none", borderRadius:"20px", fontFamily:"monospace", fontSize:"13px", fontWeight:"700", color:saving?C.muted:C.accent, cursor:saving?"not-allowed":"pointer", transition:"all 0.2s" }}>
+          {saving ? "Saving..." : saved ? "✓ Saved!" : "Save"}
+        </button>
       </div>
 
-      <div style={{padding:"0 16px"}}>
+      <div style={{ padding:"20px 16px", display:"flex", flexDirection:"column", gap:"16px" }}>
 
-        {/* Photo picker */}
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:"24px"}}>
-          <div
-            style={{width:"96px",height:"96px",borderRadius:"50%",overflow:"hidden",border:`3px solid ${T.accent}`,marginBottom:"12px",cursor:"pointer",position:"relative",boxShadow:T.shadowMd}}
-            onClick={()=>document.getElementById("ep-photo")?.click()}>
-            {photoPreview||photoURL
-              ?<img src={photoPreview||photoURL} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-              :<div style={{width:"100%",height:"100%",background:T.bg3,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:T.fontDisplay,fontSize:"36px",color:T.panel}}>{name?.charAt(0)||"?"}</div>}
-            {/* Camera overlay */}
-            <div style={{position:"absolute",bottom:0,right:0,width:"28px",height:"28px",borderRadius:"50%",background:T.accent,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"14px"}}>📷</div>
+        {/* photo */}
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"12px", padding:"20px", background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px" }}>
+          <div style={{ position:"relative" }}>
+            {photoURL
+              ? <img src={photoURL} alt="" style={{ width:"88px", height:"88px", borderRadius:"50%", objectFit:"cover", border:`3px solid ${C.accent}` }}/>
+              : <div style={{ width:"88px", height:"88px", borderRadius:"50%", background:`${C.accent}20`, border:`3px solid ${C.accent}`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"36px", fontWeight:"700", color:C.accent }}>
+                  {displayName.charAt(0).toUpperCase()||"?"}
+                </div>
+            }
+            {uploading && (
+              <div style={{ position:"absolute", inset:0, borderRadius:"50%", background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <style>{`@keyframes _sp{to{transform:rotate(360deg)}}`}</style>
+                <div style={{ width:"24px", height:"24px", borderRadius:"50%", border:"2px solid transparent", borderTop:"2px solid #fff", animation:"_sp 0.7s linear infinite" }}/>
+              </div>
+            )}
           </div>
-          <input id="ep-photo" type="file" accept="image/*" style={{display:"none"}}
-            onChange={e=>{const f=e.target.files[0];if(f){setPhotoFile(f);setPhotoPreview(URL.createObjectURL(f));}}}/>
-          <button onClick={()=>document.getElementById("ep-photo")?.click()}
-            style={{background:"transparent",border:`1.5px solid ${T.borderMid}`,borderRadius:T.rFull,padding:"8px 20px",fontFamily:T.fontBody,fontSize:"14px",fontWeight:"600",color:T.panel,cursor:"pointer"}}>
-            {photoPreview?"Change photo":"Choose photo"}
-          </button>
-          {photoFile && <div style={{fontFamily:T.fontMono,fontSize:"11px",color:T.accent,marginTop:"6px"}}>✓ New photo selected</div>}
+          <label style={{ padding:"10px 24px", background:C.page, border:`1px solid ${C.border}`, borderRadius:"20px", fontFamily:"monospace", fontSize:"13px", color:C.heading, cursor:"pointer", fontWeight:"600" }}>
+            Choose Photo
+            <input type="file" accept="image/*" onChange={handlePhotoChange} style={{ display:"none" }}/>
+          </label>
         </div>
 
-        {/* Fields */}
+        {/* fields */}
         {[
-          {label:"Display Name",val:name,     set:setName,    ph:"Your full name"},
-          {label:"Username",    val:username, set:setUsername,ph:"@handle (no spaces)"},
-        ].map(f=>(
-          <div key={f.label} style={{marginBottom:"14px"}}>
-            <label style={{fontFamily:T.fontMono,fontSize:"11px",fontWeight:"700",color:T.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",display:"block",marginBottom:"6px"}}>{f.label}</label>
-            <input value={f.val} onChange={e=>f.set(e.target.value)} placeholder={f.ph}
-              style={{width:"100%",background:T.bg1,border:`1.5px solid ${T.border}`,borderRadius:T.r14,padding:"14px 16px",color:T.textDark,fontSize:"15px",fontFamily:T.fontBody,outline:"none",caretColor:T.accent,boxShadow:T.shadowSm}}/>
+          { label:"DISPLAY NAME", value:displayName, setter:setDisplayName, placeholder:"Your name", maxLen:40 },
+          { label:"USERNAME",     value:username,    setter:setUsername,    placeholder:"@yourhandle", maxLen:30 },
+        ].map(f => (
+          <div key={f.label}>
+            <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.muted, letterSpacing:"0.12em", marginBottom:"8px" }}>{f.label}</div>
+            <input
+              value={f.value}
+              onChange={e=>f.setter(e.target.value)}
+              placeholder={f.placeholder}
+              maxLength={f.maxLen}
+              style={{ width:"100%", background:C.card, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"14px 16px", color:C.heading, fontSize:"16px", fontFamily:"system-ui", outline:"none", boxSizing:"border-box" }}
+            />
           </div>
         ))}
 
-        <div style={{marginBottom:"20px"}}>
-          <label style={{fontFamily:T.fontMono,fontSize:"11px",fontWeight:"700",color:T.textMuted,letterSpacing:"0.08em",textTransform:"uppercase",display:"block",marginBottom:"6px"}}>Bio</label>
-          <textarea value={bio} onChange={e=>setBio(e.target.value)} placeholder="Tell people about yourself..." rows={3} maxLength={160}
-            style={{width:"100%",background:T.bg1,border:`1.5px solid ${T.border}`,borderRadius:T.r14,padding:"14px 16px",color:T.textDark,fontSize:"15px",fontFamily:T.fontBody,outline:"none",resize:"none",lineHeight:"1.5",caretColor:T.accent,boxShadow:T.shadowSm}}/>
-          <div style={{textAlign:"right",fontFamily:T.fontMono,fontSize:"10px",color:T.textMuted,marginTop:"4px"}}>{bio.length}/160</div>
+        <div>
+          <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.muted, letterSpacing:"0.12em", marginBottom:"8px" }}>BIO</div>
+          <textarea
+            value={bio}
+            onChange={e=>setBio(e.target.value)}
+            placeholder='e.g. "Never skips a forfeit 💪"'
+            maxLength={120}
+            rows={3}
+            style={{ width:"100%", background:C.card, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"14px 16px", color:C.heading, fontSize:"16px", fontFamily:"system-ui", outline:"none", resize:"none", lineHeight:"1.5", boxSizing:"border-box" }}
+          />
+          <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.muted, textAlign:"right", marginTop:"4px" }}>{bio.length}/120</div>
         </div>
 
-        {error&&<div style={{background:T.redLight,border:`1px solid ${T.redBorder}`,borderRadius:T.r12,padding:"10px 14px",fontFamily:T.fontBody,fontSize:"13px",color:T.red,marginBottom:"12px"}}>{error}</div>}
-        {saved&&<div style={{background:T.greenLight,border:`1px solid ${T.greenBorder}`,borderRadius:T.r12,padding:"10px 14px",fontFamily:T.fontBody,fontSize:"13px",color:T.green,marginBottom:"12px",textAlign:"center"}}>✓ Profile saved!</div>}
+        {/* readonly email */}
+        <div>
+          <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.muted, letterSpacing:"0.12em", marginBottom:"8px" }}>EMAIL (read-only)</div>
+          <div style={{ background:C.page, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"14px 16px", color:C.muted, fontSize:"14px", fontFamily:"monospace" }}>
+            {user?.email || "—"}
+          </div>
+        </div>
 
-        <button onClick={save} disabled={loading}
-          style={{width:"100%",background:T.panel,border:"none",borderRadius:T.r16,padding:"16px",fontFamily:T.fontDisplay,fontSize:"20px",letterSpacing:"0.05em",color:T.accent,cursor:"pointer",boxShadow:T.shadowMd,opacity:loading?0.5:1}}>
-          {loading?(
-            <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:"10px"}}>
-              <div style={{width:"18px",height:"18px",borderRadius:"50%",border:`2px solid ${T.accentLight}`,borderTop:`2px solid ${T.accent}`,animation:"spin 0.8s linear infinite"}}/>
-              {photoFile?"Uploading photo...":"Saving..."}
-            </span>
-          ):"Save Changes"}
+        {error && (
+          <div style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:"12px", padding:"12px 16px", fontSize:"13px", color:"#ef4444", fontFamily:"system-ui" }}>
+            {error}
+          </div>
+        )}
+
+        {saved && (
+          <div style={{ background:`${C.accent}15`, border:`1px solid ${C.accent}40`, borderRadius:"12px", padding:"12px 16px", fontSize:"13px", color:C.accent, fontFamily:"system-ui", textAlign:"center", fontWeight:"600" }}>
+            ✓ Profile saved successfully!
+          </div>
+        )}
+
+        <button type="button" onClick={handleSave} disabled={saving||uploading}
+          style={{ width:"100%", padding:"16px", background:saving?C.page:C.heading, border:"none", borderRadius:"16px", fontFamily:"monospace", fontSize:"16px", fontWeight:"700", color:saving?C.muted:C.accent, cursor:saving?"not-allowed":"pointer", transition:"all 0.2s", letterSpacing:"0.04em" }}>
+          {saving ? "SAVING..." : saved ? "✓ SAVED!" : "SAVE CHANGES"}
         </button>
+
       </div>
     </div>
   );

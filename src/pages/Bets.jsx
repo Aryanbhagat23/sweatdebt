@@ -90,7 +90,7 @@ export default function Bets({ user }) {
       <div style={{ background:T.bg0, padding:"52px 16px 16px" }}>
         <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:"4px" }}>
           <div>
-            <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:T.textMuted }}>Good morning 👋</div>
+            <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:T.textMuted }}> {new Date().getHours() < 12 ? "Good morning 🌅" : new Date().getHours() < 17 ? "Good afternoon ☀️" : new Date().getHours() < 21 ? "Good evening 🌆" : "Good night 🌙"}</div>
             <div style={{ fontFamily:T.fontDisplay, fontSize:"32px", color:T.panel, letterSpacing:"0.02em", lineHeight:1, fontStyle:"italic" }}>
               {user?.displayName?.split(" ")[0]}'s <span style={{ color:T.accent }}>Bets</span>
             </div>
