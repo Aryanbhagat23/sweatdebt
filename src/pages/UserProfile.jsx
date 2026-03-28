@@ -4,14 +4,14 @@ import { db } from "../firebase";
 import {
   doc, getDoc, setDoc, deleteDoc,
   collection, query, where, onSnapshot, serverTimestamp,
+  addDoc,
 } from "firebase/firestore";
 
 const C = {
   page:"#f0fdf4", card:"#ffffff", border:"#d1fae5",
-  heading:"#052e16", body:"#374151", muted:"#6b7280",
+  heading:"#052e16", muted:"#6b7280",
   accent:"#10b981", accentSoft:"#6EE7B7",
-  chalkboard:"#2C4A3E",
-  gold:"#f5a623", blue:"#4a9eff",
+  chalkboard:"#2C4A3E", gold:"#f5a623", blue:"#4a9eff",
 };
 
 const QUOTES = [
@@ -66,35 +66,18 @@ function ago(ts) {
   return `${Math.floor(s/86400)}d ago`;
 }
 
-/* ─── In-app Video Modal ─── */
+/* ── In-app Video Modal ── */
 function VideoModal({ video, onClose }) {
   const vidRef = useRef(null);
   useEffect(() => {
     vidRef.current?.play().catch(()=>{});
-    // lock body scroll
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = ""; };
   }, []);
-
   return (
-    <div
-      onClick={onClose}
-      style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.95)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" }}>
-      {/* close button */}
-      <button
-        type="button"
-        onClick={onClose}
-        style={{ position:"fixed", top:"20px", right:"20px", width:"44px", height:"44px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", border:"1px solid rgba(255,255,255,0.3)", color:"#fff", fontSize:"22px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", zIndex:10000 }}>
-        ✕
-      </button>
-      <video
-        ref={vidRef}
-        src={video.videoUrl}
-        onClick={e=>e.stopPropagation()}
-        controls
-        playsInline
-        style={{ maxWidth:"100%", maxHeight:"100vh", borderRadius:"12px", objectFit:"contain" }}
-      />
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.95)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <button type="button" onClick={onClose} style={{ position:"fixed", top:"20px", right:"20px", width:"44px", height:"44px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", border:"1px solid rgba(255,255,255,0.3)", color:"#fff", fontSize:"22px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", zIndex:10000 }}>✕</button>
+      <video ref={vidRef} src={video.videoUrl} onClick={e=>e.stopPropagation()} controls playsInline style={{ maxWidth:"100%", maxHeight:"100vh", borderRadius:"12px", objectFit:"contain" }}/>
     </div>
   );
 }
@@ -115,8 +98,8 @@ export default function UserProfile({ user: currentUser }) {
   const [quoteIdx,   setQuoteIdx]   = useState(() =>
     !userId ? new Date().getDate()%QUOTES.length : Math.floor(Math.random()*QUOTES.length)
   );
-  const [quoteFade,    setQuoteFade]    = useState(true);
-  const [activeVideo,  setActiveVideo]  = useState(null); // for in-app modal
+  const [quoteFade,   setQuoteFade]   = useState(true);
+  const [activeVideo, setActiveVideo] = useState(null);
 
   const days = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
   const today = days[new Date().getDay()];
@@ -126,59 +109,70 @@ export default function UserProfile({ user: currentUser }) {
     if (!viewingUid) return;
     setLoading(true);
     getDoc(doc(db,"users",viewingUid)).then(snap => {
-      setProfile(snap.exists() ? snap.data() : null);
+      if (snap.exists()) setProfile({ uid: viewingUid, ...snap.data() });
+      else setProfile({ uid: viewingUid }); // user exists in auth but no doc yet
       setLoading(false);
-    });
+    }).catch(() => { setProfile({ uid: viewingUid }); setLoading(false); });
   }, [viewingUid]);
 
-  /* check friendship status */
+  /* check friendship — runs after profile loads */
   useEffect(() => {
     if (!currentUser || isMe || !viewingUid) return;
-    getDoc(doc(db,"users",currentUser.uid,"friends",viewingUid))
+    const friendRef = doc(db, "users", currentUser.uid, "friends", viewingUid);
+    getDoc(friendRef)
       .then(snap => setIsFriend(snap.exists()))
-      .catch(()=>{});
-  }, [currentUser, viewingUid, isMe]);
+      .catch(() => setIsFriend(false));
+  }, [currentUser, viewingUid, isMe, profile]);
 
   /* load bets */
   useEffect(() => {
     if (!viewingUid) return;
     const q = query(collection(db,"bets"), where("createdBy","==",viewingUid));
-    return onSnapshot(q, snap => setBets(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    return onSnapshot(q, snap => setBets(snap.docs.map(d=>({id:d.id,...d.data()}))), ()=>{});
   }, [viewingUid]);
 
   /* load videos */
   useEffect(() => {
     if (!viewingUid) return;
     const q = query(collection(db,"videos"), where("uploadedBy","==",viewingUid));
-    return onSnapshot(q, snap => setVideos(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    return onSnapshot(q, snap => setVideos(snap.docs.map(d=>({id:d.id,...d.data()}))), ()=>{});
   }, [viewingUid]);
 
-  /* ── FIXED: Add / Remove friend ── */
+  /* ── FIXED ADD BUTTON ── */
   const handleFriendToggle = async () => {
     if (!currentUser || addLoading) return;
     setAddLoading(true);
     setAddMsg("");
+
     try {
-      const myRef    = doc(db, "users", currentUser.uid, "friends", viewingUid);
-      const theirRef = doc(db, "users", viewingUid,      "friends", currentUser.uid);
+      const myFriendRef    = doc(db, "users", currentUser.uid, "friends", viewingUid);
+      const theirFriendRef = doc(db, "users", viewingUid, "friends", currentUser.uid);
 
       if (isFriend) {
-        await deleteDoc(myRef);
-        await deleteDoc(theirRef);
+        // Remove friend
+        await deleteDoc(myFriendRef);
+        await deleteDoc(theirFriendRef);
         setIsFriend(false);
         setAddMsg("Removed");
       } else {
-        // Write my side — stores their info in my friends list
-        await setDoc(myRef, {
+        // Get the latest profile data to ensure we have correct name
+        const profileName  = profile?.displayName || profile?.name || "Unknown";
+        const profilePhoto = profile?.photoURL    || profile?.photo || null;
+        const profileEmail = profile?.email       || "";
+        const profileUser  = profile?.username    || "";
+
+        // Write to MY friends list
+        await setDoc(myFriendRef, {
           uid:         viewingUid,
-          displayName: profile?.displayName || "Unknown",
-          username:    profile?.username    || "",
-          email:       profile?.email       || "",
-          photoURL:    profile?.photoURL    || null,
+          displayName: profileName,
+          username:    profileUser,
+          email:       profileEmail,
+          photoURL:    profilePhoto,
           addedAt:     serverTimestamp(),
         });
-        // Write their side — stores my info in their friends list
-        await setDoc(theirRef, {
+
+        // Write to THEIR friends list
+        await setDoc(theirFriendRef, {
           uid:         currentUser.uid,
           displayName: currentUser.displayName || "",
           username:    "",
@@ -186,16 +180,30 @@ export default function UserProfile({ user: currentUser }) {
           photoURL:    currentUser.photoURL    || null,
           addedAt:     serverTimestamp(),
         });
+
+        // Send a notification to the other user
+        try {
+          await addDoc(collection(db,"notifications"), {
+            toUserId:    viewingUid,
+            fromUserId:  currentUser.uid,
+            fromName:    currentUser.displayName || "Someone",
+            type:        "friend_request_accepted",
+            message:     `${currentUser.displayName || "Someone"} added you as a friend!`,
+            read:        false,
+            createdAt:   serverTimestamp(),
+          });
+        } catch(e) { /* notifications are optional */ }
+
         setIsFriend(true);
         setAddMsg("Added! 🎉");
       }
-      setTimeout(()=>setAddMsg(""), 2000);
     } catch(e) {
-      console.error("Friend error:", e);
-      setAddMsg("Error — check Firestore rules");
-      setTimeout(()=>setAddMsg(""), 3000);
+      console.error("Friend toggle error:", e);
+      setAddMsg(`Error: ${e.code || "check Firestore rules"}`);
     }
+
     setAddLoading(false);
+    setTimeout(() => setAddMsg(""), 3000);
   };
 
   const nextQuote = () => {
@@ -210,11 +218,11 @@ export default function UserProfile({ user: currentUser }) {
     </div>
   );
 
-  const displayName = profile?.displayName || "Unknown";
+  const displayName = profile?.displayName || profile?.name || "Unknown";
   const username    = profile?.username    || displayName.toLowerCase().replace(/\s/g,"");
   const photoURL    = profile?.photoURL    || null;
   const honour      = typeof profile?.honour==="number" ? profile.honour : 100;
-  const bio         = profile?.bio         || null;
+  const bio         = profile?.bio || null;
 
   const won    = bets.filter(b=>b.status==="won").length;
   const lost   = bets.filter(b=>b.status==="lost").length;
@@ -228,38 +236,35 @@ export default function UserProfile({ user: currentUser }) {
 
   const RING_R    = 30;
   const RING_CIRC = 2*Math.PI*RING_R;
-  const ringOffset = RING_CIRC*(1-honour/100);
+  const ringOffset = RING_CIRC*(1-Math.min(honour,100)/100);
 
   const earnedBadges = BADGES_DEF.map(b=>({ ...b, got:b.earned(won,lost,videos.length,honour) }));
+
   const socials = [
     { key:"instagram", icon:"📸", base:"https://instagram.com/"   },
     { key:"twitter",   icon:"𝕏",  base:"https://twitter.com/"    },
     { key:"linkedin",  icon:"💼", base:"https://linkedin.com/in/" },
     { key:"youtube",   icon:"▶️", base:"https://youtube.com/@"   },
     { key:"tiktok",    icon:"🎵", base:"https://tiktok.com/@"    },
-  ].filter(s=>profile?.[s.key]);
+  ].filter(s => profile?.[s.key]);
 
   const recentBets = [...bets]
     .sort((a,b)=>(b.createdAt?.toDate?.()||0)-(a.createdAt?.toDate?.()||0))
     .slice(0,5);
 
   const BET_STYLE = {
-    won:     { bg:"#10b981", color:"#fff", label:"WON"     },
-    lost:    { bg:"#ef4444", color:"#fff", label:"LOST"    },
-    active:  { bg:C.gold,   color:"#fff", label:"ACTIVE"  },
-    pending: { bg:C.page,   color:C.muted,label:"PENDING" },
-    disputed:{ bg:"#f97316",color:"#fff", label:"DISPUTED"},
+    won:     { bg:"#10b981", color:"#fff",  label:"WON"     },
+    lost:    { bg:"#ef4444", color:"#fff",  label:"LOST"    },
+    active:  { bg:C.gold,   color:"#fff",  label:"ACTIVE"  },
+    pending: { bg:C.page,   color:C.muted, label:"PENDING" },
+    disputed:{ bg:"#f97316",color:"#fff",  label:"DISPUTED"},
+    forfeit_dodged: { bg:"#7c3aed", color:"#fff", label:"DODGED" },
   };
 
   return (
     <div style={{ minHeight:"100vh", background:C.page, paddingBottom:"100px" }}>
-      <style>{`
-        @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-        .q-in{animation:fadein .45s ease}
-        ::-webkit-scrollbar{display:none}
-      `}</style>
+      <style>{`@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}} .q-in{animation:fadein .45s ease} ::-webkit-scrollbar{display:none}`}</style>
 
-      {/* in-app video modal */}
       {activeVideo && <VideoModal video={activeVideo} onClose={()=>setActiveVideo(null)}/>}
 
       {/* back button */}
@@ -316,12 +321,11 @@ export default function UserProfile({ user: currentUser }) {
         </div>
       </div>
 
-      {/* ── CHALLENGE + ADD buttons (other user only) ── */}
+      {/* ── CHALLENGE + ADD (other user only) ── */}
       {!isMe && (
         <div style={{ padding:"0 12px 12px" }}>
           <div style={{ display:"flex", gap:"8px" }}>
-            <button type="button"
-              onClick={()=>navigate(`/create?opponent=${viewingUid}`)}
+            <button type="button" onClick={()=>navigate(`/create?opponent=${viewingUid}`)}
               style={{ flex:2, padding:"13px", background:C.chalkboard, border:"none", borderRadius:"14px", fontFamily:"monospace", fontSize:"15px", fontWeight:"700", color:C.accent, cursor:"pointer", letterSpacing:"0.04em" }}>
               ⚔️ CHALLENGE
             </button>
@@ -329,18 +333,20 @@ export default function UserProfile({ user: currentUser }) {
               onClick={handleFriendToggle}
               disabled={addLoading}
               style={{
-                flex:1, padding:"13px", borderRadius:"14px", fontFamily:"monospace", fontSize:"14px", fontWeight:"700", cursor:addLoading?"not-allowed":"pointer", transition:"all 0.2s",
+                flex:1, padding:"13px", borderRadius:"14px", fontFamily:"monospace", fontSize:"14px", fontWeight:"700",
+                cursor: addLoading ? "not-allowed" : "pointer",
+                transition:"all 0.2s",
                 background: isFriend ? C.page : C.card,
-                border:     `2px solid ${isFriend ? "#ef4444" : C.accent}`,
-                color:      isFriend ? "#ef4444" : C.accent,
-                opacity:    addLoading ? 0.6 : 1,
+                border: `2px solid ${isFriend ? "#ef4444" : C.accent}`,
+                color: isFriend ? "#ef4444" : C.accent,
+                opacity: addLoading ? 0.6 : 1,
               }}>
-              {addLoading ? "..." : isFriend ? "✓ FRIENDS" : "+ ADD"}
+              {addLoading ? "⏳" : isFriend ? "✓ FRIENDS" : "+ ADD"}
             </button>
           </div>
           {/* feedback message */}
           {addMsg && (
-            <div style={{ marginTop:"8px", textAlign:"center", fontSize:"13px", color:addMsg.includes("Error") ? "#ef4444" : C.accent, fontFamily:"monospace", fontWeight:"600" }}>
+            <div style={{ marginTop:"8px", textAlign:"center", fontSize:"13px", color: addMsg.startsWith("Error") ? "#ef4444" : C.accent, fontFamily:"monospace", fontWeight:"600" }}>
               {addMsg}
             </div>
           )}
@@ -428,7 +434,7 @@ export default function UserProfile({ user: currentUser }) {
         </div>
 
         {/* social links */}
-        {socials.length>0 && (
+        {socials.length > 0 && (
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"14px 16px" }}>
             <div style={{ fontSize:"10px", color:C.muted, fontFamily:"monospace", letterSpacing:"0.1em", marginBottom:"12px" }}>FIND ME ON</div>
             <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
@@ -445,11 +451,11 @@ export default function UserProfile({ user: currentUser }) {
         {/* recent bets */}
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"14px 16px" }}>
           <div style={{ fontSize:"10px", color:C.muted, fontFamily:"monospace", letterSpacing:"0.1em", marginBottom:"12px" }}>RECENT BETS</div>
-          {recentBets.length===0
+          {recentBets.length === 0
             ? <div style={{ textAlign:"center", padding:"20px 0", color:C.muted, fontSize:"13px" }}>No bets yet 🎯</div>
             : <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
                 {recentBets.map(b=>{
-                  const s = BET_STYLE[b.status]||BET_STYLE.pending;
+                  const s = BET_STYLE[b.status] || BET_STYLE.pending;
                   return (
                     <div key={b.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 12px", background:C.page, borderRadius:"10px", border:`1px solid ${C.border}` }}>
                       <div style={{ flex:1, marginRight:"8px" }}>
@@ -464,23 +470,17 @@ export default function UserProfile({ user: currentUser }) {
           }
         </div>
 
-        {/* ── VIDEO GRID — opens in-app modal ── */}
-        {videos.length>0 && (
+        {/* videos */}
+        {videos.length > 0 && (
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"14px 16px" }}>
-            <div style={{ fontSize:"10px", color:C.muted, fontFamily:"monospace", letterSpacing:"0.1em", marginBottom:"12px" }}>
-              FORFEIT VIDEOS ({videos.length})
-            </div>
+            <div style={{ fontSize:"10px", color:C.muted, fontFamily:"monospace", letterSpacing:"0.1em", marginBottom:"12px" }}>FORFEIT VIDEOS ({videos.length})</div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"6px" }}>
               {videos.slice(0,9).map(v=>(
-                <div key={v.id}
-                  onClick={()=>setActiveVideo(v)}
+                <div key={v.id} onClick={()=>setActiveVideo(v)}
                   style={{ aspectRatio:"1", background:"#000", borderRadius:"10px", overflow:"hidden", position:"relative", cursor:"pointer" }}>
                   <video src={v.videoUrl} style={{ width:"100%", height:"100%", objectFit:"cover" }} preload="metadata"/>
-                  {/* play overlay */}
                   <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(0,0,0,0.3)" }}>
-                    <div style={{ width:"34px", height:"34px", borderRadius:"50%", background:"rgba(255,255,255,0.9)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"14px" }}>
-                      ▶
-                    </div>
+                    <div style={{ width:"34px", height:"34px", borderRadius:"50%", background:"rgba(255,255,255,0.9)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"14px" }}>▶</div>
                   </div>
                 </div>
               ))}

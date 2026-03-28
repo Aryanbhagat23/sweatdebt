@@ -1,232 +1,390 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { db } from "../firebase";
-import { collection, addDoc, serverTimestamp, getDocs } from "firebase/firestore";
+import {
+  collection, addDoc, serverTimestamp,
+  getDocs, query, where, setDoc, doc,
+} from "firebase/firestore";
 import T from "../theme";
 
-const SPORTS = [
-  { key:"cricket",    label:"Cricket",    emoji:"🏏" },
-  { key:"football",   label:"Football",   emoji:"⚽" },
-  { key:"gaming",     label:"Gaming",     emoji:"🎮" },
-  { key:"basketball", label:"Basketball", emoji:"🏀" },
-  { key:"custom",     label:"Custom",     emoji:"🎯" },
-  { key:"chess",      label:"Chess",      emoji:"♟️" },
+/* ── options ── */
+const FORFEITS = [
+  { id:"pushups",  icon:"💪", name:"Pushups"  },
+  { id:"run",      icon:"🏃", name:"Run"       },
+  { id:"burpees",  icon:"🔥", name:"Burpees"  },
+  { id:"squats",   icon:"🦵", name:"Squats"   },
+  { id:"plank",    icon:"🧘", name:"Plank"    },
+  { id:"custom",   icon:"✏️", name:"Custom"   },
 ];
 
-const QUICK_FORFEITS = [
-  { label:"Push-ups",   emoji:"💪", reps:20 },
-  { label:"Squats",     emoji:"🦵", reps:50 },
-  { label:"Burpees",    emoji:"🔥", reps:10 },
-  { label:"Run 2km",    emoji:"🏃", reps:1  },
-  { label:"Sit-ups",    emoji:"🎯", reps:30 },
-  { label:"Plank 2min", emoji:"⏱", reps:1  },
+const SPORTS = [
+  { id:"football",   icon:"⚽", name:"Football"   },
+  { id:"basketball", icon:"🏀", name:"Basketball" },
+  { id:"cricket",    icon:"🏏", name:"Cricket"    },
+  { id:"gaming",     icon:"🎮", name:"Gaming"     },
+  { id:"mma",        icon:"🥊", name:"MMA"        },
+  { id:"custom",     icon:"🎯", name:"Other"      },
 ];
 
 const DEADLINES = [
-  { label:"24 hours", hours:24  },
-  { label:"48 hours", hours:48  },
-  { label:"72 hours", hours:72  },
-  { label:"1 week",   hours:168 },
+  { value:24,  label:"24 hours" },
+  { value:48,  label:"48 hours" },
+  { value:72,  label:"3 days"   },
+  { value:168, label:"1 week"   },
 ];
 
+const C = {
+  page:"#f0fdf4", card:"#ffffff", border:"#d1fae5",
+  heading:"#052e16", muted:"#6b7280", accent:"#10b981",
+};
+
 export default function CreateBet({ user }) {
-  const navigate  = useNavigate();
-  const location  = useLocation();
-  const prefilled = location.state?.opponent;
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const prefilledUid = searchParams.get("opponent");
 
-  const [step,          setStep]         = useState(1);
-  const [sport,         setSport]        = useState("");
-  const [betDesc,       setBetDesc]      = useState(location.state?.prefillDesc||"");
-  const [forfeit,       setForfeit]      = useState(location.state?.prefillForfeit||"");
-  const [reps,          setReps]         = useState("");
-  const [opponentEmail, setOpponentEmail]= useState(prefilled?.email||"");
-  const [opponentName,  setOpponentName] = useState(prefilled?.displayName||"");
-  const [deadlineHours, setDeadlineHours]= useState(48);
-  const [friends,       setFriends]      = useState([]);
-  const [submitting,    setSubmitting]   = useState(false);
-  const [error,         setError]        = useState("");
+  const [step,           setStep]           = useState(1);
+  const [sport,          setSport]          = useState(null);
+  const [forfeit,        setForfeit]        = useState(null);
+  const [reps,           setReps]           = useState("");
+  const [description,    setDescription]    = useState("");
+  const [opponentMode,   setOpponentMode]   = useState("email"); // email | friend
+  const [opponentEmail,  setOpponentEmail]  = useState("");
+  const [opponentFriend, setOpponentFriend] = useState(null);   // { uid, displayName, email, photoURL }
+  const [deadline,       setDeadline]       = useState(48);
+  const [friends,        setFriends]        = useState([]);
+  const [loading,        setLoading]        = useState(false);
+  const [error,          setError]          = useState("");
 
+  /* load friend list */
   useEffect(() => {
     if (!user) return;
-    getDocs(collection(db,"users",user.uid,"friends")).then(snap => {
-      setFriends(snap.docs.map(d => ({ id:d.id, ...d.data() })));
-    });
+    getDocs(collection(db, "users", user.uid, "friends"))
+      .then(snap => {
+        const list = snap.docs.map(d => ({ uid:d.id, ...d.data() }));
+        setFriends(list);
+        // auto-select if coming from profile page
+        if (prefilledUid) {
+          const found = list.find(f => f.uid === prefilledUid);
+          if (found) { setOpponentFriend(found); setOpponentMode("friend"); }
+        }
+      })
+      .catch(() => {});
   }, [user]);
 
-  const progress = (step / 3) * 100;
-
-  const submit = async () => {
-    if (!opponentEmail.trim()) { setError("Please enter your opponent's email"); return; }
-    if (!betDesc.trim())       { setError("Please describe the bet");             return; }
-    if (!forfeit.trim())       { setError("Please set a forfeit");                return; }
-    setSubmitting(true); setError("");
+  /* ── send auto-message to the challenged friend ── */
+  const sendChallengeMessage = async (betId, opponentUid, opponentName) => {
     try {
-      const deadlineDate = new Date(Date.now() + deadlineHours * 3600000);
-      await addDoc(collection(db,"bets"), {
-        description: betDesc.trim(), forfeit, reps: reps ? parseInt(reps) : null,
-        opponentEmail: opponentEmail.trim().toLowerCase(),
-        opponentName:  opponentName || opponentEmail.split("@")[0],
-        createdBy:     user.uid,  createdByName:  user.displayName,
-        createdByEmail:user.email, betCreatedBy:   user.uid,
-        sport: sport || "custom", status: "pending",
-        deadline: deadlineDate,   deadlineHours,
-        createdAt: serverTimestamp(),
-        gameName: location.state?.gameName || null,
+      // create/find DM conversation
+      const participants = [user.uid, opponentUid].sort();
+      const convoId = participants.join("_");
+
+      // ensure convo doc exists
+      await setDoc(doc(db, "conversations", convoId), {
+        participants,
+        participantNames: {
+          [user.uid]:  user.displayName || "You",
+          [opponentUid]: opponentName,
+        },
+        lastMessage: "⚔️ Challenge sent!",
+        updatedAt:   serverTimestamp(),
+        createdAt:   serverTimestamp(),
+      }, { merge: true });
+
+      // send the message
+      const forfeitLabel = forfeit === "custom" ? reps : `${reps} ${forfeit}`;
+      const msgText = `⚔️ I just challenged you to a bet!\n\n🏅 Sport: ${sport || "Any"}\n💀 Forfeit if you lose: ${forfeitLabel}\n🕐 Deadline: ${DEADLINES.find(d=>d.value===deadline)?.label}\n\nAccept or decline on the Challenges tab. Good luck! 😤`;
+
+      await addDoc(collection(db, "conversations", convoId, "messages"), {
+        senderId:    user.uid,
+        senderName:  user.displayName || "You",
+        text:        msgText,
+        type:        "challenge",
+        betId,
+        createdAt:   serverTimestamp(),
+        read:        false,
       });
-      navigate("/");
-    } catch(e) { console.error(e); setError("Something went wrong."); }
-    setSubmitting(false);
+    } catch(e) {
+      // message sending is optional — don't fail the whole bet creation
+      console.warn("Auto-message failed (non-critical):", e);
+    }
   };
 
-  return (
-    <div style={{ minHeight:"100vh", background:T.bg0, paddingBottom:"40px" }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+  const handleSubmit = async () => {
+    setLoading(true);
+    setError("");
 
-      {/* Header */}
+    const opponent = opponentMode === "friend" ? opponentFriend : null;
+    const email    = opponentMode === "friend" ? (opponent?.email||"") : opponentEmail.trim();
+
+    if (!email && !opponent?.uid) {
+      setError("Please enter an opponent email or pick a friend.");
+      setLoading(false);
+      return;
+    }
+    if (!forfeit) {
+      setError("Please choose a forfeit type.");
+      setLoading(false);
+      return;
+    }
+    if (!reps) {
+      setError("Please enter reps or a description.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const deadlineDate = new Date(Date.now() + deadline * 3600000);
+
+      const betDoc = await addDoc(collection(db, "bets"), {
+        createdBy:       user.uid,
+        createdByName:   user.displayName || "",
+        createdByEmail:  user.email || "",
+        opponentEmail:   email,
+        opponentUid:     opponent?.uid || null,
+        opponentName:    opponent?.displayName || opponent?.name || email,
+        sport:           sport || "custom",
+        forfeit,
+        reps,
+        description:     description.trim() || `${user.displayName} vs ${opponent?.displayName || email} — Loser does ${reps} ${forfeit}`,
+        deadline:        deadlineDate,
+        status:          "pending",
+        proofUploaded:   false,
+        penalised:       false,
+        createdAt:       serverTimestamp(),
+      });
+
+      /* ── AUTO-MESSAGE if opponent is a friend ── */
+      if (opponent?.uid) {
+        await sendChallengeMessage(betDoc.id, opponent.uid, opponent.displayName || opponent.name || "Opponent");
+      }
+
+      navigate("/bets");
+    } catch(e) {
+      console.error(e);
+      setError("Something went wrong. Try again.");
+    }
+    setLoading(false);
+  };
+
+  const canNext = {
+    1: !!sport,
+    2: !!forfeit && !!reps,
+    3: opponentMode === "friend" ? !!opponentFriend : opponentEmail.includes("@"),
+    4: true,
+  };
+
+  const STEP_TITLES = ["Pick a sport", "Choose forfeit", "Who's the opponent?", "Set deadline"];
+
+  return (
+    <div style={{ minHeight:"100vh", background:C.page, paddingBottom:"100px" }}>
+      <style>{`@keyframes _sp{to{transform:rotate(360deg)}}`}</style>
+
+      {/* header */}
       <div style={{ display:"flex", alignItems:"center", gap:"12px", padding:"52px 16px 20px" }}>
-        <button onClick={() => step > 1 ? setStep(s => s-1) : navigate(-1)} style={{ background:T.bg1, border:`1px solid ${T.border}`, borderRadius:"50%", width:"44px", height:"44px", color:T.panel, fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", boxShadow:T.shadowSm }}>←</button>
-        <div style={{ fontFamily:T.fontDisplay, fontSize:"28px", color:T.panel, letterSpacing:"0.04em", fontStyle:"italic", flex:1 }}>New <span style={{ color:T.accent }}>Bet</span></div>
-        <div style={{ fontFamily:T.fontMono, fontSize:"12px", color:T.textMuted }}>{step}/3</div>
+        <button type="button"
+          onClick={() => step > 1 ? setStep(s=>s-1) : navigate("/bets")}
+          style={{ width:"44px", height:"44px", borderRadius:"50%", background:C.card, border:`1px solid ${C.border}`, color:C.heading, fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          ←
+        </button>
+        <div style={{ flex:1 }}>
+          <div style={{ fontFamily:T.fontDisplay, fontSize:"24px", color:C.heading, letterSpacing:"0.04em", fontStyle:"italic" }}>New Bet</div>
+          <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:C.muted }}>step {step} of 4 — {STEP_TITLES[step-1]}</div>
+        </div>
       </div>
 
-      {/* Progress bar */}
-      <div style={{ height:"4px", background:T.border, margin:"0 16px 24px", borderRadius:"2px" }}>
-        <div style={{ height:"100%", width:`${progress}%`, background:T.accent, borderRadius:"2px", transition:"width 0.35s ease" }} />
+      {/* progress */}
+      <div style={{ height:"3px", background:C.border, margin:"0 16px 24px" }}>
+        <div style={{ height:"100%", width:`${(step/4)*100}%`, background:C.accent, borderRadius:"2px", transition:"width 0.3s" }}/>
       </div>
 
       <div style={{ padding:"0 16px" }}>
 
-        {/* ── STEP 1: Sport + forfeit ── */}
+        {/* ── STEP 1: Sport ── */}
         {step === 1 && (
-          <div>
-            <div style={{ fontFamily:T.fontMono, fontSize:"11px", fontWeight:"700", color:T.textMuted, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:"12px" }}>Pick a Sport / Game</div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"10px", marginBottom:"20px" }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:"12px" }}>
+            <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:C.heading, letterSpacing:"0.04em", fontStyle:"italic", marginBottom:"4px" }}>
+              What are you betting on?
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
               {SPORTS.map(s => (
-                <div key={s.key} style={{ background:sport===s.key?T.panel:T.bg1, border:`1.5px solid ${sport===s.key?T.accent:T.border}`, borderRadius:T.r16, padding:"16px 12px", textAlign:"center", cursor:"pointer", transition:"all 0.15s", boxShadow:T.shadowSm }} onClick={() => setSport(s.key)}>
-                  <div style={{ fontSize:"28px", marginBottom:"6px" }}>{s.emoji}</div>
-                  <div style={{ fontFamily:T.fontBody, fontSize:"13px", fontWeight:"600", color:sport===s.key?T.accent:T.panel }}>{s.label}</div>
-                </div>
+                <button key={s.id} type="button" onClick={() => setSport(s.id)}
+                  style={{ background:sport===s.id?C.heading:C.card, border:`1px solid ${sport===s.id?C.heading:C.border}`, borderRadius:"16px", padding:"18px", textAlign:"center", cursor:"pointer", transition:"all 0.2s" }}>
+                  <div style={{ fontSize:"30px", marginBottom:"8px" }}>{s.icon}</div>
+                  <div style={{ fontFamily:T.fontDisplay, fontSize:"16px", color:sport===s.id?C.accent:C.heading, letterSpacing:"0.04em" }}>{s.name}</div>
+                </button>
               ))}
             </div>
-
-            <div style={{ fontFamily:T.fontMono, fontSize:"11px", fontWeight:"700", color:T.textMuted, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:"12px" }}>Loser Does...</div>
-
-            {/* Quick forfeits */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px", marginBottom:"12px" }}>
-              {QUICK_FORFEITS.map(f => (
-                <div key={f.label} style={{ background:forfeit===f.label?T.panel:T.bg1, border:`1.5px solid ${forfeit===f.label?T.accent:T.border}`, borderRadius:T.r14, padding:"12px 14px", display:"flex", alignItems:"center", gap:"10px", cursor:"pointer", transition:"all 0.15s", boxShadow:T.shadowSm }} onClick={() => { setForfeit(f.label); setReps(String(f.reps)); }}>
-                  <span style={{ fontSize:"22px" }}>{f.emoji}</span>
-                  <div>
-                    <div style={{ fontFamily:T.fontBody, fontSize:"14px", fontWeight:"600", color:forfeit===f.label?T.accent:T.panel }}>{f.label}</div>
-                    <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:T.textMuted }}>{f.reps} reps</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Custom + reps counter (like screenshot) */}
-            <div style={{ background:T.bg1, border:`1px solid ${T.borderCard}`, borderRadius:T.r16, padding:"14px", marginBottom:"12px", boxShadow:T.shadowSm }}>
-              <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:T.textMuted, letterSpacing:"0.08em", marginBottom:"8px" }}>CUSTOM FORFEIT</div>
-              <div style={{ display:"flex", alignItems:"center", gap:"8px", marginBottom:"10px" }}>
-                <input value={forfeit} onChange={e => setForfeit(e.target.value)} placeholder="e.g. Push-ups" style={{ flex:1, background:T.bg2, border:`1px solid ${T.border}`, borderRadius:T.r12, padding:"12px 14px", color:T.textDark, fontSize:"15px", fontFamily:T.fontBody, outline:"none", caretColor:T.accent }} />
+            <div style={{ marginTop:"8px" }}>
+              <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:C.muted, marginBottom:"8px", letterSpacing:"0.08em", textTransform:"uppercase" }}>
+                Add a description (optional)
               </div>
-              {/* Reps counter with +/- buttons like screenshot */}
-              <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:"6px" }}>
-                  <span style={{ fontSize:"20px" }}>💪</span>
-                  <span style={{ fontFamily:T.fontBody, fontSize:"15px", fontWeight:"600", color:T.panel }}>{forfeit||"Pushups"}</span>
-                </div>
-                <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:"8px" }}>
-                  <button onClick={() => setReps(r => String(Math.max(0,(parseInt(r)||0)-5)))} style={{ width:"32px", height:"32px", borderRadius:"50%", background:T.bg3, border:`1px solid ${T.border}`, fontFamily:T.fontDisplay, fontSize:"18px", color:T.panel, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>−</button>
-                  <span style={{ fontFamily:T.fontDisplay, fontSize:"24px", color:T.panel, minWidth:"36px", textAlign:"center" }}>{reps||"0"}</span>
-                  <button onClick={() => setReps(r => String((parseInt(r)||0)+5))} style={{ width:"32px", height:"32px", borderRadius:"50%", background:T.panel, border:"none", fontFamily:T.fontDisplay, fontSize:"18px", color:T.accent, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>+</button>
-                </div>
-              </div>
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder='e.g. "I bet I can beat you in FIFA this weekend"'
+                rows={2}
+                style={{ width:"100%", background:C.card, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"12px 14px", color:C.heading, fontSize:"15px", fontFamily:T.fontBody, outline:"none", resize:"none", lineHeight:"1.5" }}
+              />
             </div>
-
-            {/* Bet description */}
-            <div style={{ background:T.bg1, border:`1px solid ${T.borderCard}`, borderRadius:T.r16, padding:"14px", marginBottom:"16px", boxShadow:T.shadowSm }}>
-              <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:T.textMuted, letterSpacing:"0.08em", marginBottom:"8px" }}>BET DESCRIPTION</div>
-              <textarea value={betDesc} onChange={e => setBetDesc(e.target.value)} placeholder="India vs Aus · Whoever's team loses does 50 squats" rows={2} maxLength={200} style={{ width:"100%", background:"transparent", border:"none", outline:"none", color:T.textDark, fontSize:"14px", fontFamily:T.fontBody, resize:"none", lineHeight:"1.5", caretColor:T.accent }} />
-            </div>
-
-            <button style={{ width:"100%", background:T.panel, border:"none", borderRadius:T.r16, padding:"15px 24px", fontFamily:T.fontDisplay, fontSize:"20px", letterSpacing:"0.05em", color:T.accent, cursor:"pointer", boxShadow:"0 4px 14px rgba(5,46,22,0.2)", opacity:!forfeit.trim()||!betDesc.trim()?0.4:1 }} disabled={!forfeit.trim()||!betDesc.trim()} onClick={() => { setError(""); setStep(2); }}>Next →</button>
           </div>
         )}
 
-        {/* ── STEP 2: Opponent ── */}
+        {/* ── STEP 2: Forfeit ── */}
         {step === 2 && (
-          <div>
-            <div style={{ fontFamily:T.fontMono, fontSize:"11px", fontWeight:"700", color:T.textMuted, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:"12px" }}>Challenge</div>
+          <div style={{ display:"flex", flexDirection:"column", gap:"16px" }}>
+            <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:C.heading, letterSpacing:"0.04em", fontStyle:"italic" }}>
+              What does the loser do?
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
+              {FORFEITS.map(f => (
+                <button key={f.id} type="button" onClick={() => setForfeit(f.id)}
+                  style={{ background:forfeit===f.id?C.heading:C.card, border:`1px solid ${forfeit===f.id?C.heading:C.border}`, borderRadius:"16px", padding:"18px", textAlign:"center", cursor:"pointer", transition:"all 0.2s" }}>
+                  <div style={{ fontSize:"28px", marginBottom:"8px" }}>{f.icon}</div>
+                  <div style={{ fontFamily:T.fontDisplay, fontSize:"16px", color:forfeit===f.id?C.accent:C.heading, letterSpacing:"0.04em" }}>{f.name}</div>
+                </button>
+              ))}
+            </div>
+            {forfeit && (
+              <div>
+                <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:C.muted, marginBottom:"8px", letterSpacing:"0.08em", textTransform:"uppercase" }}>
+                  {forfeit==="run" ? "Distance (km)" : forfeit==="plank" ? "Duration (secs)" : forfeit==="custom" ? "Describe the forfeit" : "How many reps?"}
+                </div>
+                <input
+                  value={reps}
+                  onChange={e => setReps(e.target.value)}
+                  placeholder={forfeit==="run" ? "e.g. 2" : forfeit==="custom" ? "e.g. eat a raw onion" : "e.g. 50"}
+                  style={{ width:"100%", background:C.card, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"14px 16px", color:C.heading, fontSize:"16px", fontFamily:T.fontBody, outline:"none" }}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
-            {friends.length > 0 && (
-              <>
-                <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:T.textMuted, marginBottom:"10px" }}>Your friends</div>
-                <div style={{ display:"flex", flexDirection:"column", gap:"8px", marginBottom:"16px" }}>
+        {/* ── STEP 3: Opponent ── */}
+        {step === 3 && (
+          <div style={{ display:"flex", flexDirection:"column", gap:"16px" }}>
+            <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:C.heading, letterSpacing:"0.04em", fontStyle:"italic" }}>
+              Who are you challenging?
+            </div>
+
+            {/* toggle */}
+            <div style={{ display:"flex", background:C.card, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"4px" }}>
+              <button type="button" onClick={() => setOpponentMode("friend")}
+                style={{ flex:1, padding:"10px", borderRadius:"10px", fontFamily:T.fontBody, fontSize:"13px", fontWeight:"500", cursor:"pointer", background:opponentMode==="friend"?C.heading:"transparent", color:opponentMode==="friend"?C.accent:C.muted, border:"none", transition:"all 0.2s" }}>
+                👥 From Friends
+              </button>
+              <button type="button" onClick={() => setOpponentMode("email")}
+                style={{ flex:1, padding:"10px", borderRadius:"10px", fontFamily:T.fontBody, fontSize:"13px", fontWeight:"500", cursor:"pointer", background:opponentMode==="email"?C.heading:"transparent", color:opponentMode==="email"?C.accent:C.muted, border:"none", transition:"all 0.2s" }}>
+                📧 By Email
+              </button>
+            </div>
+
+            {opponentMode === "friend" ? (
+              friends.length === 0 ? (
+                <div style={{ background:C.card, borderRadius:"14px", border:`1px solid ${C.border}`, padding:"24px", textAlign:"center" }}>
+                  <div style={{ fontSize:"32px", marginBottom:"8px" }}>👥</div>
+                  <div style={{ fontFamily:T.fontBody, fontSize:"14px", color:C.muted }}>No friends yet — add some from Find Friends first</div>
+                </div>
+              ) : (
+                <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
                   {friends.map(f => {
-                    const sel = opponentEmail === (f.email||"");
+                    const sel = opponentFriend?.uid === f.uid;
                     return (
-                      <div key={f.id} style={{ display:"flex", alignItems:"center", gap:"12px", background:sel?T.panel:T.bg1, border:`1.5px solid ${sel?T.accent:T.border}`, borderRadius:T.r16, padding:"14px", cursor:"pointer", transition:"all 0.15s", boxShadow:T.shadowSm }} onClick={() => { setOpponentEmail(f.email||""); setOpponentName(f.displayName||""); }}>
-                        <div style={{ width:"40px", height:"40px", borderRadius:"50%", background:sel?"rgba(16,185,129,0.2)":T.bg3, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.fontDisplay, fontSize:"16px", color:sel?T.accent:T.panel, flexShrink:0, border:`2px solid ${sel?T.accent:T.border}` }}>
-                          {f.displayName?.charAt(0)||"?"}
-                        </div>
+                      <div key={f.uid} onClick={() => setOpponentFriend(sel ? null : f)}
+                        style={{ display:"flex", alignItems:"center", gap:"12px", background:sel?C.heading:C.card, border:`1px solid ${sel?C.accent:C.border}`, borderRadius:"14px", padding:"12px 14px", cursor:"pointer", transition:"all 0.2s" }}>
+                        {f.photoURL
+                          ? <img src={f.photoURL} alt="" style={{ width:"42px", height:"42px", borderRadius:"50%", objectFit:"cover", border:`2px solid ${sel?C.accent:C.border}` }}/>
+                          : <div style={{ width:"42px", height:"42px", borderRadius:"50%", background:sel?`${C.accent}30`:C.page, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.fontDisplay, fontSize:"18px", color:sel?C.accent:C.heading, border:`2px solid ${sel?C.accent:C.border}`, flexShrink:0 }}>
+                              {(f.displayName||"?").charAt(0)}
+                            </div>
+                        }
                         <div style={{ flex:1 }}>
-                          <div style={{ fontFamily:T.fontBody, fontSize:"15px", fontWeight:"600", color:sel?T.accent:T.panel }}>{f.displayName}</div>
-                          <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:T.textMuted }}>@{f.username||f.email}</div>
+                          <div style={{ fontFamily:T.fontBody, fontSize:"14px", fontWeight:"600", color:sel?"#fff":C.heading }}>{f.displayName || f.name}</div>
+                          <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:C.muted }}>@{f.username||f.displayName?.toLowerCase().replace(/\s/g,"")}</div>
                         </div>
-                        {sel && <div style={{ color:T.accent, fontSize:"20px" }}>✓</div>}
+                        {sel && <div style={{ width:"24px", height:"24px", borderRadius:"50%", background:C.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"14px", color:C.heading, flexShrink:0 }}>✓</div>}
                       </div>
                     );
                   })}
+                  {opponentFriend && (
+                    <div style={{ background:`${C.accent}15`, border:`1px solid ${C.accent}40`, borderRadius:"10px", padding:"10px 14px", fontFamily:T.fontBody, fontSize:"13px", color:C.accent }}>
+                      💬 A challenge message will be auto-sent to {opponentFriend.displayName} in your chat
+                    </div>
+                  )}
                 </div>
-              </>
+              )
+            ) : (
+              <div>
+                <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:C.muted, marginBottom:"8px", letterSpacing:"0.08em", textTransform:"uppercase" }}>Opponent's email</div>
+                <input
+                  type="email"
+                  value={opponentEmail}
+                  onChange={e => setOpponentEmail(e.target.value)}
+                  placeholder="friend@email.com"
+                  style={{ width:"100%", background:C.card, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"14px 16px", color:C.heading, fontSize:"16px", fontFamily:T.fontBody, outline:"none" }}
+                />
+              </div>
             )}
-
-            <div style={{ background:T.bg1, border:`1px solid ${T.borderCard}`, borderRadius:T.r16, padding:"14px", marginBottom:"16px", boxShadow:T.shadowSm }}>
-              <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:T.textMuted, letterSpacing:"0.08em", marginBottom:"8px" }}>OR ENTER EMAIL</div>
-              <input value={opponentEmail} onChange={e => setOpponentEmail(e.target.value)} placeholder="friend@example.com" type="email" style={{ width:"100%", background:T.bg2, border:`1px solid ${T.border}`, borderRadius:T.r12, padding:"12px 14px", color:T.textDark, fontSize:"15px", fontFamily:T.fontBody, outline:"none", caretColor:T.accent }} />
-            </div>
-
-            {error && <div style={{ background:T.redLight, border:`1px solid ${T.redBorder}`, borderRadius:T.r12, padding:"12px 16px", fontFamily:T.fontBody, fontSize:"14px", color:T.red, marginBottom:"12px" }}>{error}</div>}
-            <button style={{ width:"100%", background:T.panel, border:"none", borderRadius:T.r16, padding:"15px 24px", fontFamily:T.fontDisplay, fontSize:"20px", letterSpacing:"0.05em", color:T.accent, cursor:"pointer", boxShadow:"0 4px 14px rgba(5,46,22,0.2)", opacity:!opponentEmail.trim()?0.4:1 }} disabled={!opponentEmail.trim()} onClick={() => { setError(""); setStep(3); }}>Next →</button>
           </div>
         )}
 
-        {/* ── STEP 3: Deadline + confirm ── */}
-        {step === 3 && (
-          <div>
-            <div style={{ fontFamily:T.fontMono, fontSize:"11px", fontWeight:"700", color:T.textMuted, letterSpacing:"0.12em", textTransform:"uppercase", marginBottom:"12px" }}>Set Deadline</div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px", marginBottom:"20px" }}>
+        {/* ── STEP 4: Deadline + Summary ── */}
+        {step === 4 && (
+          <div style={{ display:"flex", flexDirection:"column", gap:"16px" }}>
+            <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:C.heading, letterSpacing:"0.04em", fontStyle:"italic" }}>
+              Set a deadline
+            </div>
+            <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
               {DEADLINES.map(d => (
-                <div key={d.hours} style={{ background:deadlineHours===d.hours?T.panel:T.bg1, border:`1.5px solid ${deadlineHours===d.hours?T.accent:T.border}`, borderRadius:T.r14, padding:"16px", textAlign:"center", cursor:"pointer", transition:"all 0.15s", boxShadow:T.shadowSm }} onClick={() => setDeadlineHours(d.hours)}>
-                  <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:deadlineHours===d.hours?T.accent:T.panel, letterSpacing:"0.03em" }}>{d.label}</div>
-                  {deadlineHours===d.hours && <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:T.accent, marginTop:"4px" }}>✓ Selected</div>}
-                </div>
+                <button key={d.value} type="button" onClick={() => setDeadline(d.value)}
+                  style={{ padding:"10px 18px", borderRadius:"20px", fontFamily:T.fontBody, fontSize:"13px", cursor:"pointer", background:deadline===d.value?C.heading:C.card, color:deadline===d.value?C.accent:C.muted, border:`1px solid ${deadline===d.value?C.heading:C.border}`, transition:"all 0.2s" }}>
+                  {d.label}
+                </button>
               ))}
             </div>
 
-            {/* Summary */}
-            <div style={{ background:T.panel, borderRadius:T.r16, padding:"16px", marginBottom:"16px" }}>
-              <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:"rgba(255,255,255,0.4)", letterSpacing:"0.1em", marginBottom:"12px" }}>BET SUMMARY</div>
+            {/* summary */}
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"16px" }}>
+              <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:C.muted, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"12px" }}>Bet summary</div>
               {[
-                { label:"Sport",    val: SPORTS.find(s=>s.key===sport)?.label||"Custom" },
-                { label:"Bet",      val: `"${betDesc}"` },
-                { label:"Forfeit",  val: `${reps?reps+"x ":""}${forfeit}` },
-                { label:"Against",  val: opponentName||opponentEmail },
-                { label:"Deadline", val: `${DEADLINES.find(d=>d.hours===deadlineHours)?.label} after acceptance` },
+                { label:"Sport",    val: sport ? `${SPORTS.find(s=>s.id===sport)?.icon} ${sport}` : "—" },
+                { label:"Forfeit",  val: forfeit ? `${FORFEITS.find(f=>f.id===forfeit)?.icon} ${reps} ${forfeit}` : "—" },
+                { label:"Opponent", val: opponentMode==="friend" ? (opponentFriend?.displayName||"—") : (opponentEmail||"—") },
+                { label:"Deadline", val: DEADLINES.find(d=>d.value===deadline)?.label },
               ].map(row => (
-                <div key={row.label} style={{ display:"flex", gap:"12px", marginBottom:"8px" }}>
-                  <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:"rgba(255,255,255,0.4)", width:"60px", flexShrink:0 }}>{row.label}</div>
-                  <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:"#fff", flex:1 }}>{row.val}</div>
+                <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px", gap:"12px" }}>
+                  <span style={{ fontFamily:T.fontBody, fontSize:"13px", color:C.muted, flexShrink:0 }}>{row.label}</span>
+                  <span style={{ fontFamily:T.fontBody, fontSize:"13px", color:C.heading, textAlign:"right" }}>{row.val}</span>
                 </div>
               ))}
             </div>
 
-            {error && <div style={{ background:T.redLight, border:`1px solid ${T.redBorder}`, borderRadius:T.r12, padding:"12px 16px", fontFamily:T.fontBody, fontSize:"14px", color:T.red, marginBottom:"12px" }}>{error}</div>}
-            <button style={{ width:"100%", background:T.accent, border:"none", borderRadius:T.r16, padding:"16px 24px", fontFamily:T.fontDisplay, fontSize:"22px", letterSpacing:"0.06em", color:"#fff", cursor:"pointer", boxShadow:"0 4px 14px rgba(16,185,129,0.35)", opacity:submitting?0.5:1 }} disabled={submitting} onClick={submit}>
-              {submitting ? "Sending..." : "Send Challenge 🔥"}
-            </button>
+            {error && (
+              <div style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:"12px", padding:"12px 16px", fontFamily:T.fontBody, fontSize:"13px", color:"#ef4444" }}>
+                {error}
+              </div>
+            )}
           </div>
+        )}
+      </div>
+
+      {/* bottom button */}
+      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:"480px", padding:"16px", background:`${C.page}f0`, borderTop:`1px solid ${C.border}`, paddingBottom:"calc(16px + env(safe-area-inset-bottom, 0px))" }}>
+        {step < 4 ? (
+          <button type="button"
+            onClick={() => setStep(s=>s+1)}
+            disabled={!canNext[step]}
+            style={{ width:"100%", padding:"18px", background:canNext[step]?C.heading:"#e5e7eb", border:"none", borderRadius:"16px", fontFamily:T.fontDisplay, fontSize:"22px", letterSpacing:"0.06em", color:canNext[step]?C.accent:C.muted, cursor:canNext[step]?"pointer":"not-allowed", transition:"all 0.2s" }}>
+            NEXT →
+          </button>
+        ) : (
+          <button type="button"
+            onClick={handleSubmit}
+            disabled={loading}
+            style={{ width:"100%", padding:"18px", background:loading?"#e5e7eb":C.heading, border:"none", borderRadius:"16px", fontFamily:T.fontDisplay, fontSize:"22px", letterSpacing:"0.06em", color:loading?C.muted:C.accent, cursor:loading?"not-allowed":"pointer", transition:"all 0.2s" }}>
+            {loading ? "CREATING..." : "⚔️ SEND CHALLENGE"}
+          </button>
         )}
       </div>
     </div>
