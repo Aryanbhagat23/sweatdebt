@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { db } from "../firebase";
 import {
@@ -32,46 +32,78 @@ const QUOTES = [
   "Make your opponent regret challenging you.",
 ];
 
-// ── Updated tiers with more levels ──
 const TIERS = [
-  { min:0,   max:4,   name:"Rookie",   icon:"🌱", color:"#a3a3a3" },
-  { min:5,   max:14,  name:"Iron",     icon:"⚙️",  color:"#78716c" },
-  { min:15,  max:29,  name:"Bronze",   icon:"🥉",  color:"#cd7f32" },
-  { min:30,  max:49,  name:"Silver",   icon:"🥈",  color:"#9ba8b0" },
-  { min:50,  max:79,  name:"Gold",     icon:"🥇",  color:"#f5a623" },
-  { min:80,  max:124, name:"Platinum", icon:"💎",  color:"#4a9eff" },
-  { min:125, max:199, name:"Diamond",  icon:"💠",  color:"#a78bfa" },
-  { min:200, max:999, name:"Legend",   icon:"👑",  color:"#10b981" },
+  { min:0,   max:4,   name:"Rookie",   icon:"🌱" },
+  { min:5,   max:14,  name:"Iron",     icon:"⚙️"  },
+  { min:15,  max:29,  name:"Bronze",   icon:"🥉"  },
+  { min:30,  max:49,  name:"Silver",   icon:"🥈"  },
+  { min:50,  max:79,  name:"Gold",     icon:"🥇"  },
+  { min:80,  max:124, name:"Platinum", icon:"💎"  },
+  { min:125, max:199, name:"Diamond",  icon:"💠"  },
+  { min:200, max:999, name:"Legend",   icon:"👑"  },
 ];
 const getTier = pts => [...TIERS].reverse().find(t => pts >= t.min) || TIERS[0];
 
 const BADGES_DEF = [
-  { icon:"🔥", name:"On Fire",      earned:(w)=> w>=1          },
-  { icon:"⚡", name:"Streak x3",    earned:(w)=> w>=3          },
-  { icon:"🏆", name:"First Win",    earned:(w)=> w>=1          },
-  { icon:"💪", name:"Proof Poster", earned:(_,_2,v)=> v>=3     },
-  { icon:"👑", name:"Top Player",   earned:(w,l)=> (w+l)>=5 && w/(w+l||1)>=0.7 },
-  { icon:"💀", name:"No Mercy",     earned:(w)=> w>=5          },
-  { icon:"🌟", name:"Dedicated",    earned:(w,l)=> (w+l)>=10  },
-  { icon:"💎", name:"Platinum",     earned:(w)=> w*3>=80       },
-  { icon:"🤝", name:"Honest",       earned:(_,_2,v)=> v>=3    },
-  { icon:"🔑", name:"Legend",       earned:(w)=> w*3>=200      },
+  { icon:"🔥", name:"On Fire",      earned:(w)=>w>=1 },
+  { icon:"⚡", name:"Streak x3",    earned:(w)=>w>=3 },
+  { icon:"🏆", name:"First Win",    earned:(w)=>w>=1 },
+  { icon:"💪", name:"Proof Poster", earned:(_,_2,v)=>v>=3 },
+  { icon:"👑", name:"Top Player",   earned:(w,l)=>(w+l)>=5&&w/(w+l||1)>=0.7 },
+  { icon:"💀", name:"No Mercy",     earned:(w)=>w>=5 },
+  { icon:"🌟", name:"Dedicated",    earned:(w,l)=>(w+l)>=10 },
+  { icon:"💎", name:"Platinum",     earned:(w)=>w*3>=80 },
+  { icon:"🤝", name:"Honest",       earned:(_,_2,v)=>v>=3 },
+  { icon:"🔑", name:"Legend",       earned:(w)=>w*3>=200 },
 ];
 
 function ago(ts) {
   if (!ts?.toDate) return "";
-  const s = Math.floor((new Date() - ts.toDate())/1000);
-  if (s<60)    return "just now";
-  if (s<3600)  return `${Math.floor(s/60)}m ago`;
+  const s = Math.floor((new Date()-ts.toDate())/1000);
+  if (s<60) return "just now";
+  if (s<3600) return `${Math.floor(s/60)}m ago`;
   if (s<86400) return `${Math.floor(s/3600)}h ago`;
   return `${Math.floor(s/86400)}d ago`;
 }
 
+/* ─── In-app Video Modal ─── */
+function VideoModal({ video, onClose }) {
+  const vidRef = useRef(null);
+  useEffect(() => {
+    vidRef.current?.play().catch(()=>{});
+    // lock body scroll
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  return (
+    <div
+      onClick={onClose}
+      style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.95)", zIndex:9999, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      {/* close button */}
+      <button
+        type="button"
+        onClick={onClose}
+        style={{ position:"fixed", top:"20px", right:"20px", width:"44px", height:"44px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", border:"1px solid rgba(255,255,255,0.3)", color:"#fff", fontSize:"22px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", zIndex:10000 }}>
+        ✕
+      </button>
+      <video
+        ref={vidRef}
+        src={video.videoUrl}
+        onClick={e=>e.stopPropagation()}
+        controls
+        playsInline
+        style={{ maxWidth:"100%", maxHeight:"100vh", borderRadius:"12px", objectFit:"contain" }}
+      />
+    </div>
+  );
+}
+
 export default function UserProfile({ user: currentUser }) {
-  const navigate    = useNavigate();
-  const { userId }  = useParams();
-  const viewingUid  = userId || currentUser?.uid;
-  const isMe        = viewingUid === currentUser?.uid;
+  const navigate   = useNavigate();
+  const { userId } = useParams();
+  const viewingUid = userId || currentUser?.uid;
+  const isMe       = viewingUid === currentUser?.uid;
 
   const [profile,    setProfile]    = useState(null);
   const [bets,       setBets]       = useState([]);
@@ -79,10 +111,12 @@ export default function UserProfile({ user: currentUser }) {
   const [loading,    setLoading]    = useState(true);
   const [isFriend,   setIsFriend]   = useState(false);
   const [addLoading, setAddLoading] = useState(false);
+  const [addMsg,     setAddMsg]     = useState("");
   const [quoteIdx,   setQuoteIdx]   = useState(() =>
-    !userId ? new Date().getDate() % QUOTES.length : Math.floor(Math.random()*QUOTES.length)
+    !userId ? new Date().getDate()%QUOTES.length : Math.floor(Math.random()*QUOTES.length)
   );
-  const [quoteFade, setQuoteFade] = useState(true);
+  const [quoteFade,    setQuoteFade]    = useState(true);
+  const [activeVideo,  setActiveVideo]  = useState(null); // for in-app modal
 
   const days = ["SUN","MON","TUE","WED","THU","FRI","SAT"];
   const today = days[new Date().getDay()];
@@ -97,11 +131,12 @@ export default function UserProfile({ user: currentUser }) {
     });
   }, [viewingUid]);
 
-  /* check friendship */
+  /* check friendship status */
   useEffect(() => {
     if (!currentUser || isMe || !viewingUid) return;
     getDoc(doc(db,"users",currentUser.uid,"friends",viewingUid))
-      .then(snap => setIsFriend(snap.exists()));
+      .then(snap => setIsFriend(snap.exists()))
+      .catch(()=>{});
   }, [currentUser, viewingUid, isMe]);
 
   /* load bets */
@@ -118,48 +153,54 @@ export default function UserProfile({ user: currentUser }) {
     return onSnapshot(q, snap => setVideos(snap.docs.map(d=>({id:d.id,...d.data()}))));
   }, [viewingUid]);
 
-  /* ── ADD / REMOVE FRIEND — this was broken before ── */
+  /* ── FIXED: Add / Remove friend ── */
   const handleFriendToggle = async () => {
     if (!currentUser || addLoading) return;
     setAddLoading(true);
+    setAddMsg("");
     try {
-      const myFriendRef    = doc(db,"users",currentUser.uid,"friends",viewingUid);
-      const theirFriendRef = doc(db,"users",viewingUid,"friends",currentUser.uid);
+      const myRef    = doc(db, "users", currentUser.uid, "friends", viewingUid);
+      const theirRef = doc(db, "users", viewingUid,      "friends", currentUser.uid);
 
       if (isFriend) {
-        // remove from both sides
-        await deleteDoc(myFriendRef);
-        await deleteDoc(theirFriendRef);
+        await deleteDoc(myRef);
+        await deleteDoc(theirRef);
         setIsFriend(false);
+        setAddMsg("Removed");
       } else {
-        // add to both sides with all needed fields
-        const myData = {
+        // Write my side — stores their info in my friends list
+        await setDoc(myRef, {
           uid:         viewingUid,
           displayName: profile?.displayName || "Unknown",
           username:    profile?.username    || "",
           email:       profile?.email       || "",
           photoURL:    profile?.photoURL    || null,
           addedAt:     serverTimestamp(),
-        };
-        const theirData = {
+        });
+        // Write their side — stores my info in their friends list
+        await setDoc(theirRef, {
           uid:         currentUser.uid,
           displayName: currentUser.displayName || "",
-          username:    currentUser.username    || "",
+          username:    "",
           email:       currentUser.email       || "",
           photoURL:    currentUser.photoURL    || null,
           addedAt:     serverTimestamp(),
-        };
-        await setDoc(myFriendRef,    myData);
-        await setDoc(theirFriendRef, theirData);
+        });
         setIsFriend(true);
+        setAddMsg("Added! 🎉");
       }
-    } catch(e) { console.error("Friend toggle error:", e); }
+      setTimeout(()=>setAddMsg(""), 2000);
+    } catch(e) {
+      console.error("Friend error:", e);
+      setAddMsg("Error — check Firestore rules");
+      setTimeout(()=>setAddMsg(""), 3000);
+    }
     setAddLoading(false);
   };
 
   const nextQuote = () => {
     setQuoteFade(false);
-    setTimeout(() => { setQuoteIdx(i=>(i+1)%QUOTES.length); setQuoteFade(true); }, 200);
+    setTimeout(()=>{ setQuoteIdx(i=>(i+1)%QUOTES.length); setQuoteFade(true); }, 200);
   };
 
   if (loading) return (
@@ -173,16 +214,16 @@ export default function UserProfile({ user: currentUser }) {
   const username    = profile?.username    || displayName.toLowerCase().replace(/\s/g,"");
   const photoURL    = profile?.photoURL    || null;
   const honour      = typeof profile?.honour==="number" ? profile.honour : 100;
-  const bio         = profile?.bio || null;
+  const bio         = profile?.bio         || null;
 
   const won    = bets.filter(b=>b.status==="won").length;
   const lost   = bets.filter(b=>b.status==="lost").length;
   const total  = bets.length;
   const winRate = total>0 ? Math.round((won/total)*100) : 0;
 
-  const pts       = won*3 + lost;
-  const tier      = getTier(pts);
-  const nextTier  = TIERS[TIERS.indexOf(tier)+1];
+  const pts      = won*3 + lost;
+  const tier     = getTier(pts);
+  const nextTier = TIERS[TIERS.indexOf(tier)+1];
   const ptsToNext = nextTier ? nextTier.min - pts : 0;
 
   const RING_R    = 30;
@@ -190,7 +231,6 @@ export default function UserProfile({ user: currentUser }) {
   const ringOffset = RING_CIRC*(1-honour/100);
 
   const earnedBadges = BADGES_DEF.map(b=>({ ...b, got:b.earned(won,lost,videos.length,honour) }));
-
   const socials = [
     { key:"instagram", icon:"📸", base:"https://instagram.com/"   },
     { key:"twitter",   icon:"𝕏",  base:"https://twitter.com/"    },
@@ -204,11 +244,11 @@ export default function UserProfile({ user: currentUser }) {
     .slice(0,5);
 
   const BET_STYLE = {
-    won:      { bg:"#10b981", color:"#fff",    label:"WON"      },
-    lost:     { bg:"#ef4444", color:"#fff",    label:"LOST"     },
-    active:   { bg:C.gold,    color:"#fff",    label:"ACTIVE"   },
-    pending:  { bg:C.page,    color:C.muted,   label:"PENDING"  },
-    disputed: { bg:"#f97316", color:"#fff",    label:"DISPUTED" },
+    won:     { bg:"#10b981", color:"#fff", label:"WON"     },
+    lost:    { bg:"#ef4444", color:"#fff", label:"LOST"    },
+    active:  { bg:C.gold,   color:"#fff", label:"ACTIVE"  },
+    pending: { bg:C.page,   color:C.muted,label:"PENDING" },
+    disputed:{ bg:"#f97316",color:"#fff", label:"DISPUTED"},
   };
 
   return (
@@ -218,6 +258,9 @@ export default function UserProfile({ user: currentUser }) {
         .q-in{animation:fadein .45s ease}
         ::-webkit-scrollbar{display:none}
       `}</style>
+
+      {/* in-app video modal */}
+      {activeVideo && <VideoModal video={activeVideo} onClose={()=>setActiveVideo(null)}/>}
 
       {/* back button */}
       <div style={{ position:"fixed", top:"env(safe-area-inset-top,0px)", left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:"480px", zIndex:100, padding:"12px 16px", pointerEvents:"none" }}>
@@ -240,23 +283,13 @@ export default function UserProfile({ user: currentUser }) {
             {tier.icon}
           </div>
         </div>
-
-        <div style={{ fontSize:"21px", fontWeight:"700", color:"#fff", marginBottom:"3px", fontStyle:"italic", letterSpacing:"0.03em" }}>
-          {displayName.toUpperCase()}
-        </div>
+        <div style={{ fontSize:"21px", fontWeight:"700", color:"#fff", marginBottom:"3px", fontStyle:"italic", letterSpacing:"0.03em" }}>{displayName.toUpperCase()}</div>
         <div style={{ fontSize:"12px", color:C.accentSoft, fontFamily:"monospace", marginBottom:"10px" }}>@{username}</div>
         {bio && <div style={{ fontSize:"12px", color:"rgba(255,255,255,0.55)", fontStyle:"italic", marginBottom:"10px", padding:"0 24px" }}>"{bio}"</div>}
-
-        <div style={{ display:"inline-flex", gap:"6px", marginBottom: isMe ? 0 : "10px" }}>
-          <div style={{ background:"rgba(110,231,183,0.15)", border:"1px solid rgba(110,231,183,0.3)", borderRadius:"20px", padding:"4px 12px", fontSize:"11px", color:C.accentSoft, fontFamily:"monospace" }}>
-            {tier.icon} {tier.name.toUpperCase()}
-          </div>
-          <div style={{ background:"rgba(110,231,183,0.15)", border:"1px solid rgba(110,231,183,0.3)", borderRadius:"20px", padding:"4px 12px", fontSize:"11px", color:C.accentSoft, fontFamily:"monospace" }}>
-            H: {honour}
-          </div>
+        <div style={{ display:"inline-flex", gap:"6px" }}>
+          <div style={{ background:"rgba(110,231,183,0.15)", border:"1px solid rgba(110,231,183,0.3)", borderRadius:"20px", padding:"4px 12px", fontSize:"11px", color:C.accentSoft, fontFamily:"monospace" }}>{tier.icon} {tier.name.toUpperCase()}</div>
+          <div style={{ background:"rgba(110,231,183,0.15)", border:"1px solid rgba(110,231,183,0.3)", borderRadius:"20px", padding:"4px 12px", fontSize:"11px", color:C.accentSoft, fontFamily:"monospace" }}>H: {honour}</div>
         </div>
-
-        {/* Edit for own profile */}
         {isMe && (
           <div style={{ position:"absolute", top:"16px", right:"16px" }}>
             <button type="button" onClick={()=>navigate("/edit-profile")}
@@ -267,7 +300,7 @@ export default function UserProfile({ user: currentUser }) {
         )}
       </div>
 
-      {/* ── FLOATING STAT CARDS ── */}
+      {/* floating stat cards */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"8px", margin:"-22px 12px 10px", position:"relative", zIndex:1 }}>
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"14px", padding:"14px 6px", textAlign:"center", boxShadow:"0 4px 12px rgba(44,74,62,0.08)" }}>
           <div style={{ fontSize:"26px", fontWeight:"700", color:C.accent, fontStyle:"italic" }}>{won}</div>
@@ -283,26 +316,40 @@ export default function UserProfile({ user: currentUser }) {
         </div>
       </div>
 
-      {/* ── ADD / CHALLENGE BUTTONS (only for other users) ── */}
+      {/* ── CHALLENGE + ADD buttons (other user only) ── */}
       {!isMe && (
-        <div style={{ display:"flex", gap:"8px", padding:"0 12px 12px" }}>
-          <button type="button"
-            onClick={() => navigate(`/create?opponent=${viewingUid}`)}
-            style={{ flex:2, padding:"13px", background:C.chalkboard, border:"none", borderRadius:"14px", fontFamily:"monospace", fontSize:"15px", fontWeight:"700", color:C.accent, cursor:"pointer", letterSpacing:"0.04em" }}>
-            ⚔️ CHALLENGE
-          </button>
-          <button type="button"
-            onClick={handleFriendToggle}
-            disabled={addLoading}
-            style={{ flex:1, padding:"13px", background: isFriend ? C.page : C.card, border:`2px solid ${isFriend ? "#ef4444" : C.accent}`, borderRadius:"14px", fontFamily:"monospace", fontSize:"14px", fontWeight:"700", color: isFriend ? "#ef4444" : C.accent, cursor:"pointer", opacity:addLoading?0.6:1, transition:"all 0.2s" }}>
-            {addLoading ? "..." : isFriend ? "✓ FRIENDS" : "+ ADD"}
-          </button>
+        <div style={{ padding:"0 12px 12px" }}>
+          <div style={{ display:"flex", gap:"8px" }}>
+            <button type="button"
+              onClick={()=>navigate(`/create?opponent=${viewingUid}`)}
+              style={{ flex:2, padding:"13px", background:C.chalkboard, border:"none", borderRadius:"14px", fontFamily:"monospace", fontSize:"15px", fontWeight:"700", color:C.accent, cursor:"pointer", letterSpacing:"0.04em" }}>
+              ⚔️ CHALLENGE
+            </button>
+            <button type="button"
+              onClick={handleFriendToggle}
+              disabled={addLoading}
+              style={{
+                flex:1, padding:"13px", borderRadius:"14px", fontFamily:"monospace", fontSize:"14px", fontWeight:"700", cursor:addLoading?"not-allowed":"pointer", transition:"all 0.2s",
+                background: isFriend ? C.page : C.card,
+                border:     `2px solid ${isFriend ? "#ef4444" : C.accent}`,
+                color:      isFriend ? "#ef4444" : C.accent,
+                opacity:    addLoading ? 0.6 : 1,
+              }}>
+              {addLoading ? "..." : isFriend ? "✓ FRIENDS" : "+ ADD"}
+            </button>
+          </div>
+          {/* feedback message */}
+          {addMsg && (
+            <div style={{ marginTop:"8px", textAlign:"center", fontSize:"13px", color:addMsg.includes("Error") ? "#ef4444" : C.accent, fontFamily:"monospace", fontWeight:"600" }}>
+              {addMsg}
+            </div>
+          )}
         </div>
       )}
 
       <div style={{ padding:"0 10px", display:"flex", flexDirection:"column", gap:"10px" }}>
 
-        {/* ── ROTATING QUOTE ── */}
+        {/* rotating quote */}
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"16px 18px" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"10px" }}>
             <span style={{ fontSize:"10px", color:C.muted, fontFamily:"monospace", letterSpacing:"0.1em" }}>TODAY'S QUOTE</span>
@@ -326,19 +373,19 @@ export default function UserProfile({ user: currentUser }) {
           </div>
         </div>
 
-        {/* ── HONOUR BAR ── */}
+        {/* honour bar */}
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"14px 16px" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px" }}>
             <span style={{ fontSize:"13px", fontWeight:"600", color:C.heading }}>Honour Score</span>
             <span style={{ fontSize:"13px", color:C.accent, fontFamily:"monospace", fontWeight:"700" }}>{honour} / 100</span>
           </div>
           <div style={{ height:"10px", background:C.page, borderRadius:"5px", border:`1px solid ${C.border}`, overflow:"hidden" }}>
-            <div style={{ height:"100%", width:`${honour}%`, background:`linear-gradient(90deg,${C.accent},#34d399)`, borderRadius:"5px", transition:"width 0.8s ease" }}/>
+            <div style={{ height:"100%", width:`${Math.min(honour,100)}%`, background:`linear-gradient(90deg,${C.accent},#34d399)`, borderRadius:"5px", transition:"width 0.8s ease" }}/>
           </div>
-          {nextTier && <div style={{ fontSize:"11px", color:C.muted, marginTop:"6px" }}>{ptsToNext} pts to reach <span style={{ color:C.blue, fontWeight:"600" }}>{nextTier.icon} {nextTier.name}</span></div>}
+          {nextTier && <div style={{ fontSize:"11px", color:C.muted, marginTop:"6px" }}>{ptsToNext} pts to <span style={{ color:C.blue, fontWeight:"600" }}>{nextTier.icon} {nextTier.name}</span></div>}
         </div>
 
-        {/* ── HONOUR RING + STATS ── */}
+        {/* honour ring + stats */}
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"14px 16px", display:"flex", alignItems:"center", gap:"16px" }}>
           <div style={{ flexShrink:0 }}>
             <svg width="76" height="76" viewBox="0 0 72 72">
@@ -352,11 +399,11 @@ export default function UserProfile({ user: currentUser }) {
           </div>
           <div style={{ flex:1, display:"flex", flexDirection:"column", gap:"10px" }}>
             {[
-              { label:"🔥 Win Streak", val:won,          color:C.gold    },
-              { label:"🎥 Videos",     val:videos.length, color:C.blue    },
-              { label:"⚔️ Total Bets", val:total,         color:C.heading },
-              { label:"📊 Win Rate",   val:`${winRate}%`, color:C.accent  },
-            ].map(r => (
+              { label:"🔥 Win Streak", val:won,           color:C.gold    },
+              { label:"🎥 Videos",     val:videos.length,  color:C.blue    },
+              { label:"⚔️ Total Bets", val:total,          color:C.heading },
+              { label:"📊 Win Rate",   val:`${winRate}%`,  color:C.accent  },
+            ].map(r=>(
               <div key={r.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <span style={{ fontSize:"13px", color:C.heading, fontWeight:"600" }}>{r.label}</span>
                 <span style={{ fontSize:"16px", fontWeight:"700", color:r.color }}>{r.val}</span>
@@ -365,14 +412,14 @@ export default function UserProfile({ user: currentUser }) {
           </div>
         </div>
 
-        {/* ── BADGES ── */}
+        {/* badges */}
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"14px 16px" }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"12px" }}>
             <span style={{ fontSize:"10px", color:C.muted, fontFamily:"monospace", letterSpacing:"0.1em" }}>BADGES</span>
             <span style={{ fontSize:"10px", color:C.accent, fontFamily:"monospace" }}>{earnedBadges.filter(b=>b.got).length} / {BADGES_DEF.length}</span>
           </div>
           <div style={{ display:"flex", gap:"6px", flexWrap:"wrap" }}>
-            {earnedBadges.map(b => (
+            {earnedBadges.map(b=>(
               <div key={b.name} style={{ background:b.got?C.page:"transparent", border:`1px solid ${C.border}`, borderRadius:"10px", padding:"6px 12px", fontSize:"12px", color:b.got?C.heading:C.muted, fontWeight:b.got?"600":"400", opacity:b.got?1:0.4 }}>
                 {b.icon} {b.name}
               </div>
@@ -380,12 +427,12 @@ export default function UserProfile({ user: currentUser }) {
           </div>
         </div>
 
-        {/* ── SOCIAL LINKS ── */}
-        {socials.length > 0 && (
+        {/* social links */}
+        {socials.length>0 && (
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"14px 16px" }}>
             <div style={{ fontSize:"10px", color:C.muted, fontFamily:"monospace", letterSpacing:"0.1em", marginBottom:"12px" }}>FIND ME ON</div>
             <div style={{ display:"flex", gap:"8px", flexWrap:"wrap" }}>
-              {socials.map(s => (
+              {socials.map(s=>(
                 <a key={s.key} href={`${s.base}${profile[s.key]}`} target="_blank" rel="noreferrer"
                   style={{ display:"flex", alignItems:"center", gap:"6px", background:C.page, border:`1px solid ${C.border}`, borderRadius:"20px", padding:"6px 14px", fontSize:"13px", color:C.heading, textDecoration:"none", fontWeight:"500" }}>
                   <span style={{ fontSize:"16px" }}>{s.icon}</span>{profile[s.key]}
@@ -395,18 +442,18 @@ export default function UserProfile({ user: currentUser }) {
           </div>
         )}
 
-        {/* ── RECENT BETS ── */}
+        {/* recent bets */}
         <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"14px 16px" }}>
           <div style={{ fontSize:"10px", color:C.muted, fontFamily:"monospace", letterSpacing:"0.1em", marginBottom:"12px" }}>RECENT BETS</div>
-          {recentBets.length === 0
+          {recentBets.length===0
             ? <div style={{ textAlign:"center", padding:"20px 0", color:C.muted, fontSize:"13px" }}>No bets yet 🎯</div>
             : <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-                {recentBets.map(b => {
-                  const s = BET_STYLE[b.status] || BET_STYLE.pending;
+                {recentBets.map(b=>{
+                  const s = BET_STYLE[b.status]||BET_STYLE.pending;
                   return (
                     <div key={b.id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 12px", background:C.page, borderRadius:"10px", border:`1px solid ${C.border}` }}>
                       <div style={{ flex:1, marginRight:"8px" }}>
-                        <div style={{ fontSize:"13px", fontWeight:"600", color:C.heading, marginBottom:"2px" }}>{b.title || `${b.reps||""} ${b.forfeit||"Bet"}`}</div>
+                        <div style={{ fontSize:"13px", fontWeight:"600", color:C.heading, marginBottom:"2px" }}>{b.title||`${b.reps||""} ${b.forfeit||"Bet"}`}</div>
                         <div style={{ fontSize:"11px", color:C.muted, fontFamily:"monospace" }}>{ago(b.createdAt)}</div>
                       </div>
                       <div style={{ background:s.bg, color:s.color, fontSize:"10px", fontWeight:"700", padding:"4px 10px", borderRadius:"10px", flexShrink:0 }}>{s.label}</div>
@@ -417,15 +464,24 @@ export default function UserProfile({ user: currentUser }) {
           }
         </div>
 
-        {/* ── VIDEOS ── */}
-        {videos.length > 0 && (
+        {/* ── VIDEO GRID — opens in-app modal ── */}
+        {videos.length>0 && (
           <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"14px 16px" }}>
-            <div style={{ fontSize:"10px", color:C.muted, fontFamily:"monospace", letterSpacing:"0.1em", marginBottom:"12px" }}>FORFEIT VIDEOS ({videos.length})</div>
+            <div style={{ fontSize:"10px", color:C.muted, fontFamily:"monospace", letterSpacing:"0.1em", marginBottom:"12px" }}>
+              FORFEIT VIDEOS ({videos.length})
+            </div>
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:"6px" }}>
-              {videos.slice(0,6).map(v => (
-                <div key={v.id} style={{ aspectRatio:"1", background:"#000", borderRadius:"10px", overflow:"hidden", position:"relative", cursor:"pointer" }} onClick={()=>window.open(v.videoUrl,"_blank")}>
+              {videos.slice(0,9).map(v=>(
+                <div key={v.id}
+                  onClick={()=>setActiveVideo(v)}
+                  style={{ aspectRatio:"1", background:"#000", borderRadius:"10px", overflow:"hidden", position:"relative", cursor:"pointer" }}>
                   <video src={v.videoUrl} style={{ width:"100%", height:"100%", objectFit:"cover" }} preload="metadata"/>
-                  <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(0,0,0,0.25)", fontSize:"20px" }}>▶</div>
+                  {/* play overlay */}
+                  <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", background:"rgba(0,0,0,0.3)" }}>
+                    <div style={{ width:"34px", height:"34px", borderRadius:"50%", background:"rgba(255,255,255,0.9)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"14px" }}>
+                      ▶
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
