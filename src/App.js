@@ -119,6 +119,7 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
 <Route path="/seasons" element={<Seasons user={user}/>}/>
 <Route path="/profile/:userId" element={<UserProfile user={user}/>}/>
 <Route path="/profile"         element={<UserProfile user={user}/>}/>
+
       </Routes>
       <NavBar user={user} livePhoto={livePhoto} unreadDMs={unreadDMs} onProfileOpen={()=>setProfileOpen(true)}/>
       <ProfileOverlay user={user} isOpen={profileOpen} onClose={()=>setProfileOpen(false)}/>
