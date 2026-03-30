@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { db, storage } from "../firebase";
+import { db } from "../firebase";
 import {
-  doc, getDoc, updateDoc, collection, query, where,
+  doc, updateDoc, collection, query, where,
   getDocs, deleteDoc, onSnapshot,
 } from "firebase/firestore";
-import { ref, deleteObject } from "firebase/storage";
 import T from "../theme";
 
 // ─── theme helpers ────────────────────────────────────────────────────────────
@@ -232,10 +231,6 @@ export default function ProfileOverlay({ user, onClose }){
   async function handleDeleteVideo(video){
     try{
       await deleteDoc(doc(db,"videos",video.id));
-      // optionally delete from Storage if storagePath is saved
-      if(video.storagePath){
-        try{ await deleteObject(ref(storage, video.storagePath)); }catch(_){}
-      }
     }catch(e){ alert("Could not delete video."); }
     setDeleteConfirm(null);
     setVideoMenu(null);
