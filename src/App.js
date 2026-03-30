@@ -24,6 +24,7 @@ import GroupBets       from "./pages/GroupBets";
 import CreateGroupBet  from "./pages/CreateGroupBet";
 import GroupBetRoom    from "./pages/GroupBetRoom";
 import Seasons from "./pages/Seasons";
+import JuryVote from "./pages/Juryvote";
 
 
 // Desktop-safe fixed nav — stays within the 480px column on wide screens
@@ -119,6 +120,7 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
 <Route path="/seasons" element={<Seasons user={user}/>}/>
 <Route path="/profile/:userId" element={<UserProfile user={user}/>}/>
 <Route path="/profile"         element={<UserProfile user={user}/>}/>
+<Route path="/jury/:videoId" element={<JuryVote user={user} />} />
 
       </Routes>
       <NavBar user={user} livePhoto={livePhoto} unreadDMs={unreadDMs} onProfileOpen={()=>setProfileOpen(true)}/>

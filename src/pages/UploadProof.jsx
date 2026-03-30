@@ -1,225 +1,243 @@
-import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { db } from "../firebase";
-import { doc, getDoc, collection, addDoc, serverTimestamp, updateDoc } from "firebase/firestore";
-import T from "../theme";
+import {
+  collection, addDoc, serverTimestamp,
+  doc, getDoc, updateDoc,
+} from "firebase/firestore";
 
-const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/daf3vs5n6/video/upload";
-const UPLOAD_PRESET  = "jrmodcfe";
+const C = {
+  page:"#f0fdf4", card:"#fff", border:"#d1fae5",
+  heading:"#052e16", muted:"#6b7280",
+  accent:"#10b981", chalkboard:"#2C4A3E",
+  accentSoft:"#6EE7B7", danger:"#ef4444",
+};
 
-const TRASH_TALKS = [
-  "easy win, buddy. Now get on the floor 😂",
-  "told you this would happen 😤",
-  "no excuses, start sweating! 🏋️",
-  "hope you stretched first 😅",
-  "time to pay the price champ 💪",
-  "this is what happens when you lose 🔥",
-];
+const CLOUD  = "daf3vs5n6";
+const PRESET = "jrmodcfe";
 
 export default function UploadProof({ user }) {
   const navigate = useNavigate();
-  const { betId } = useParams();
-  const fileRef   = useRef();
-  const cameraRef = useRef();
+  const { betId }         = useParams();
+  const [searchParams]    = useSearchParams();
+  const paramBetId        = betId || searchParams.get("betId") || "general";
 
-  const [bet,       setBet]       = useState(null);
-  const [loading,   setLoading]   = useState(true);
-  const [file,      setFile]      = useState(null);
-  const [preview,   setPreview]   = useState(null);
-  const [uploading, setUploading] = useState(false);
-  const [progress,  setProgress]  = useState(0);
-  const [done,      setDone]      = useState(false);
-  const [error,     setError]     = useState("");
-  const [trashTalk] = useState(() => TRASH_TALKS[Math.floor(Math.random() * TRASH_TALKS.length)]);
-  const [showCamera, setShowCamera] = useState(false);
-  const [stream,     setStream]     = useState(null);
+  const [bet,         setBet]         = useState(null);
+  const [file,        setFile]        = useState(null);
+  const [preview,     setPreview]     = useState(null);
+  const [description, setDescription] = useState("");
+  const [uploading,   setUploading]   = useState(false);
+  const [progress,    setProgress]    = useState(0);
+  const [done,        setDone]        = useState(false);
+  const [error,       setError]       = useState("");
 
+  /* load bet info */
   useEffect(() => {
-    if (!betId) { setLoading(false); return; }
-    getDoc(doc(db, "bets", betId)).then(snap => {
-      if (snap.exists()) setBet({ id: snap.id, ...snap.data() });
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, [betId]);
+    if (paramBetId && paramBetId !== "general") {
+      getDoc(doc(db, "bets", paramBetId))
+        .then(snap => { if (snap.exists()) setBet({ id:snap.id, ...snap.data() }); })
+        .catch(() => {});
+    }
+  }, [paramBetId]);
 
-  useEffect(() => () => { if (stream) stream.getTracks().forEach(t => t.stop()); }, [stream]);
+  const handleFileChange = e => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (!f.type.startsWith("video/")) { setError("Please select a video file."); return; }
+    if (f.size > 100 * 1024 * 1024) { setError("Video must be under 100 MB."); return; }
+    setFile(f);
+    setPreview(URL.createObjectURL(f));
+    setError("");
+  };
 
-  const startCamera = async () => {
+  const handleUpload = async () => {
+    if (!file) { setError("Choose a video first."); return; }
+    if (!user)  { setError("You must be logged in."); return; }
+    setUploading(true);
+    setError("");
+    setProgress(10);
+
     try {
-      const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
-      setStream(s); setShowCamera(true);
-      setTimeout(() => { if (cameraRef.current) cameraRef.current.srcObject = s; }, 100);
-    } catch { setError("Camera access denied. Use file upload instead."); }
-  };
+      /* ── 1. Upload to Cloudinary ── */
+      const form = new FormData();
+      form.append("file",           file);
+      form.append("upload_preset",  PRESET);
+      form.append("resource_type",  "video");
 
-  const stopCamera = () => {
-    if (stream) stream.getTracks().forEach(t => t.stop());
-    setStream(null); setShowCamera(false);
-  };
+      setProgress(30);
+      const res  = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/video/upload`, {
+        method: "POST", body: form,
+      });
+      const data = await res.json();
+      if (!data.secure_url) throw new Error("Cloudinary upload failed");
+      setProgress(70);
 
-  const pickFile = e => {
-    const f = e.target.files[0]; if (!f) return;
-    if (f.size > 100 * 1024 * 1024) { setError("File too large (max 100MB)"); return; }
-    setFile(f); setPreview(URL.createObjectURL(f)); setError("");
-  };
+      /* ── 2. Save to Firestore videos collection ── */
+      const betData = bet || {};
+      await addDoc(collection(db, "videos"), {
+        videoUrl:       data.secure_url,
+        uploadedBy:     user.uid,
+        uploadedByName: user.displayName || "",
+        uploaderPhoto:  user.photoURL    || null,
+        betId:          paramBetId,
+        description:    description.trim(),
 
-  const upload = async () => {
-    if (!file) { setError("Please choose a video first"); return; }
-    setUploading(true); setProgress(0); setError("");
-    try {
-      const fd = new FormData();
-      fd.append("file", file); fd.append("upload_preset", UPLOAD_PRESET);
-      const xhr = new XMLHttpRequest();
-      xhr.upload.onprogress = e => { if (e.lengthComputable) setProgress(Math.round((e.loaded / e.total) * 85)); };
-      const result = await new Promise((res, rej) => {
-        xhr.open("POST", CLOUDINARY_URL);
-        xhr.onload = () => { if (xhr.status === 200) res(JSON.parse(xhr.responseText)); else rej(new Error("Upload failed")); };
-        xhr.onerror = () => rej(new Error("Network error"));
-        xhr.send(fd);
+        /* for canVerdict checks in Feed */
+        betCreatedBy:    betData.createdBy    || null,
+        opponentEmail:   betData.opponentEmail|| null,
+        createdByEmail:  betData.createdByEmail||null,
+
+        createdAt:  serverTimestamp(),
+        likes:      0,
+        comments:   0,
+        approved:   false,
+        disputed:   false,
+        jurors:     [],
+        juryStatus: null,
+        juryDeadline: null,
       });
       setProgress(90);
-      await addDoc(collection(db, "videos"), {
-        url: result.secure_url, publicId: result.public_id,
-        uploadedBy: user.uid, uploaderName: user.displayName,
-        betId: betId || null,
-        bet: bet ? { description: bet.description, forfeit: bet.forfeit, reps: bet.reps } : null,
-        createdAt: serverTimestamp(), likes: [], comments: [],
-      });
-      if (betId) await updateDoc(doc(db, "bets", betId), { proofUrl: result.secure_url, proofUploadedAt: serverTimestamp() });
-      setProgress(100); setDone(true);
-    } catch (e) { setError(e.message || "Upload failed"); }
+
+      /* ── 3. If tied to a real bet, mark it as "proof_uploaded" ── */
+      if (paramBetId && paramBetId !== "general" && bet) {
+        await updateDoc(doc(db, "bets", paramBetId), { proofUploaded: true });
+      }
+
+      setProgress(100);
+      setDone(true);
+      setTimeout(() => navigate("/feed"), 2000);
+
+    } catch(e) {
+      console.error(e);
+      setError("Upload failed. Check your connection and try again.");
+    }
     setUploading(false);
   };
 
-  if (loading) return (
-    <div style={{ minHeight: "100vh", background: T.bg0, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-      <div style={{ width: "32px", height: "32px", borderRadius: "50%", border: `3px solid ${T.border}`, borderTop: `3px solid ${T.accent}`, animation: "spin 0.8s linear infinite" }} />
-    </div>
-  );
-
-  if (done) return (
-    <div style={{ minHeight: "100vh", background: T.bg0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "24px", textAlign: "center" }}>
-      <div style={{ fontSize: "72px", marginBottom: "16px" }}>🏆</div>
-      <div style={{ fontFamily: T.fontDisplay, fontSize: "40px", color: T.panel, letterSpacing: "0.02em", fontStyle: "italic", marginBottom: "8px" }}>
-        Debt <span style={{ color: T.accent }}>Paid!</span>
-      </div>
-      <div style={{ fontFamily: T.fontBody, fontSize: "16px", color: T.textMuted, marginBottom: "28px" }}>Your proof has been posted to the feed 🔥</div>
-      <button onClick={() => navigate("/")} style={{ background: T.panel, border: "none", borderRadius: T.rFull, padding: "16px 32px", fontFamily: T.fontDisplay, fontSize: "22px", letterSpacing: "0.05em", color: T.accent, cursor: "pointer", boxShadow: T.shadowMd }}>Back to Bets</button>
-    </div>
-  );
-
+  /* ── UI ── */
   return (
-    <div style={{ minHeight: "100vh", background: T.bg0, paddingBottom: "40px" }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style>
+    <div style={{ minHeight:"100vh", background:C.page, paddingBottom:"60px" }}>
+      <style>{`@keyframes _sp{to{transform:rotate(360deg)}}`}</style>
 
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", gap: "12px", padding: "52px 16px 20px" }}>
-        <button onClick={() => navigate(-1)} style={{ background: T.bg1, border: `1px solid ${T.border}`, borderRadius: "50%", width: "44px", height: "44px", color: T.panel, fontSize: "20px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: T.shadowSm }}>←</button>
-        <div style={{ fontFamily: T.fontDisplay, fontSize: "28px", color: T.panel, letterSpacing: "0.04em", fontStyle: "italic", flex: 1 }}>Pay <span style={{ color: T.accent }}>Debt</span></div>
+      <div style={{ background:C.chalkboard, padding:"52px 16px 20px" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
+          <button type="button" onClick={()=>navigate(-1)}
+            style={{ width:"40px", height:"40px", borderRadius:"50%", background:"rgba(110,231,183,0.15)", border:"1px solid rgba(110,231,183,0.3)", color:"#fff", fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            ←
+          </button>
+          <div>
+            <div style={{ fontFamily:"monospace", fontSize:"13px", color:C.accentSoft, letterSpacing:"0.1em" }}>UPLOAD PROOF</div>
+            <div style={{ fontSize:"20px", fontWeight:"700", color:"#fff", fontStyle:"italic", letterSpacing:"0.03em" }}>
+              {bet ? `${bet.reps || ""} ${bet.forfeit || "Forfeit"}`.trim() : "Post Forfeit Video"}
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div style={{ padding: "0 16px" }}>
-        {/* ── DEBT DUE card ── */}
-        {bet && (
-          <div style={{ background: T.panel, borderRadius: T.r20, padding: "24px", marginBottom: "16px", textAlign: "center", boxShadow: "0 4px 20px rgba(5,46,22,0.2)" }}>
-            {/* DEBT DUE badge */}
-            <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: T.orange, borderRadius: T.rFull, padding: "6px 16px", fontFamily: T.fontMono, fontSize: "12px", fontWeight: "800", color: "#fff", letterSpacing: "0.1em", marginBottom: "20px" }}>
-              ⚡ DEBT DUE
-            </div>
+      <div style={{ padding:"20px 16px", display:"flex", flexDirection:"column", gap:"16px" }}>
 
-            {/* Player avatars */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "6px" }}>
-              <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: "#7c3aed", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.fontDisplay, fontSize: "20px", color: "#fff", border: `3px solid ${T.panel}`, zIndex: 2, position: "relative" }}>
-                {bet.createdByName?.charAt(0) || "K"}
-              </div>
-              <div style={{ width: "36px", height: "36px", borderRadius: "50%", background: T.bg3, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.fontMono, fontSize: "12px", color: T.textMid, border: `3px solid ${T.panel}`, zIndex: 1, margin: "0 -6px", position: "relative" }}>W</div>
-              <div style={{ width: "52px", height: "52px", borderRadius: "50%", background: T.accent, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.fontDisplay, fontSize: "20px", color: "#fff", border: `3px solid ${T.panel}`, zIndex: 2, position: "relative" }}>
-                {user?.displayName?.charAt(0) || "A"}
-              </div>
-            </div>
-            <div style={{ display: "flex", justifyContent: "center", gap: "52px", fontFamily: T.fontMono, fontSize: "11px", color: "rgba(255,255,255,0.45)", marginBottom: "20px" }}>
-              <span>{bet.createdByName?.split(" ")[0]}</span>
-              <span>You</span>
-            </div>
-
-            {/* TIME TO SWEAT */}
-            <div style={{ fontFamily: T.fontDisplay, fontSize: "clamp(30px,8vw,46px)", color: "#fff", letterSpacing: "0.02em", lineHeight: "1.05", fontStyle: "italic", marginBottom: "6px" }}>
-              TIME TO SWEAT,<br />NO EXCUSES.
-            </div>
-            <div style={{ fontFamily: T.fontBody, fontSize: "14px", color: "rgba(255,255,255,0.45)", marginBottom: "20px" }}>
-              {bet.description || `${bet.createdByName} won. You lost. Pay up.`}
-            </div>
-
-            {/* Exercise count */}
-            <div style={{ background: "rgba(255,255,255,0.07)", borderRadius: T.r16, padding: "20px", marginBottom: "16px" }}>
-              <div style={{ fontSize: "32px", marginBottom: "8px" }}>🏋️</div>
-              <div style={{ fontFamily: T.fontMono, fontSize: "11px", fontWeight: "700", color: "rgba(255,255,255,0.4)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: "4px" }}>{bet.forfeit}</div>
-              <div style={{ fontFamily: T.fontDisplay, fontSize: "64px", color: T.accent, lineHeight: 1 }}>{bet.reps || "?"}</div>
-              <div style={{ fontFamily: T.fontBody, fontSize: "14px", color: "rgba(255,255,255,0.4)", marginTop: "4px" }}>reps owed</div>
-            </div>
-
-            {/* Trash talk */}
-            <div style={{ background: "rgba(239,68,68,0.1)", border: `1px solid rgba(239,68,68,0.2)`, borderRadius: T.r12, padding: "12px 16px", borderLeft: `3px solid ${T.red}`, textAlign: "left" }}>
-              <div style={{ fontFamily: T.fontBody, fontSize: "14px", color: "rgba(255,255,255,0.65)", fontStyle: "italic" }}>
-                "{bet.createdByName?.split(" ")[0]} says: {trashTalk}"
-              </div>
-            </div>
+        {/* Done state */}
+        {done && (
+          <div style={{ background:`${C.accent}15`, border:`1px solid ${C.accent}40`, borderRadius:"16px", padding:"24px", textAlign:"center" }}>
+            <div style={{ fontSize:"48px", marginBottom:"8px" }}>🎉</div>
+            <div style={{ fontSize:"18px", fontWeight:"700", color:C.heading }}>Video uploaded!</div>
+            <div style={{ fontSize:"13px", color:C.muted, marginTop:"4px" }}>Heading to the feed…</div>
           </div>
         )}
 
-        {!bet && (
-          <div style={{ background: T.bg1, border: `1px solid ${T.borderCard}`, borderRadius: T.r16, padding: "16px", marginBottom: "16px", boxShadow: T.shadowCard }}>
-            <div style={{ fontFamily: T.fontMono, fontSize: "11px", fontWeight: "700", color: T.textMuted, letterSpacing: "0.1em", marginBottom: "4px" }}>FREE POST</div>
-            <div style={{ fontFamily: T.fontBody, fontSize: "14px", color: T.textMuted }}>Post any workout video to the feed</div>
-          </div>
-        )}
+        {!done && (
+          <>
+            {/* Video picker */}
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", overflow:"hidden" }}>
+              {preview
+                ? <video src={preview} controls style={{ width:"100%", maxHeight:"300px", objectFit:"cover", display:"block" }}/>
+                : (
+                  <label style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"200px", cursor:"pointer", gap:"12px" }}>
+                    <div style={{ fontSize:"48px" }}>🎥</div>
+                    <div style={{ fontFamily:"monospace", fontSize:"13px", color:C.muted, letterSpacing:"0.06em" }}>TAP TO SELECT VIDEO</div>
+                    <input type="file" accept="video/*" onChange={handleFileChange} style={{ display:"none" }}/>
+                  </label>
+                )
+              }
+              {preview && (
+                <label style={{ display:"block", textAlign:"center", padding:"10px", fontFamily:"monospace", fontSize:"12px", color:C.accent, cursor:"pointer", borderTop:`1px solid ${C.border}` }}>
+                  ↩ Change video
+                  <input type="file" accept="video/*" onChange={handleFileChange} style={{ display:"none" }}/>
+                </label>
+              )}
+            </div>
 
-        {/* Camera / file */}
-        {showCamera ? (
-          <div style={{ marginBottom: "16px" }}>
-            <video ref={cameraRef} autoPlay muted playsInline style={{ width: "100%", borderRadius: T.r16, background: T.panel, aspectRatio: "9/16", objectFit: "cover" }} />
-            <button onClick={stopCamera} style={{ width: "100%", marginTop: "10px", background: "transparent", border: `1.5px solid ${T.borderMid}`, borderRadius: T.r16, padding: "14px", fontFamily: T.fontDisplay, fontSize: "18px", color: T.textMuted, cursor: "pointer" }}>Cancel Camera</button>
-          </div>
-        ) : preview ? (
-          <div style={{ marginBottom: "16px", position: "relative" }}>
-            <video src={preview} controls style={{ width: "100%", borderRadius: T.r16, background: T.panel, maxHeight: "320px", objectFit: "contain" }} />
-            <button onClick={() => { setFile(null); setPreview(null); }} style={{ position: "absolute", top: "10px", right: "10px", background: "rgba(0,0,0,0.6)", border: "none", borderRadius: "50%", width: "32px", height: "32px", color: "#fff", fontSize: "16px", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
-          </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "16px" }}>
-            <button onClick={startCamera} style={{ background: T.panel, border: "none", borderRadius: T.r16, padding: "20px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", cursor: "pointer", boxShadow: T.shadowMd }}>
-              <span style={{ fontSize: "28px" }}>📸</span>
-              <span style={{ fontFamily: T.fontDisplay, fontSize: "16px", color: T.accent, letterSpacing: "0.04em" }}>Record Now</span>
+            {/* Description */}
+            <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"16px" }}>
+              <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.muted, letterSpacing:"0.1em", marginBottom:"10px" }}>
+                CAPTION / DESCRIPTION <span style={{ color:C.muted, fontWeight:"400" }}>(optional)</span>
+              </div>
+              <textarea
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                placeholder='e.g. "100 burpees in the rain, as promised 💀" or just leave it blank'
+                maxLength={200}
+                rows={3}
+                style={{ width:"100%", background:C.page, border:`1px solid ${C.border}`, borderRadius:"10px", padding:"12px 14px", color:C.heading, fontSize:"14px", fontFamily:"system-ui", outline:"none", resize:"none", lineHeight:"1.5", boxSizing:"border-box" }}
+              />
+              <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.muted, textAlign:"right", marginTop:"4px" }}>
+                {description.length}/200
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            {uploading && (
+              <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"16px" }}>
+                <div style={{ fontFamily:"monospace", fontSize:"11px", color:C.muted, marginBottom:"8px" }}>
+                  UPLOADING… {progress}%
+                </div>
+                <div style={{ height:"8px", background:C.page, borderRadius:"4px", overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${progress}%`, background:`linear-gradient(90deg,${C.accent},#34d399)`, borderRadius:"4px", transition:"width 0.4s ease" }}/>
+                </div>
+              </div>
+            )}
+
+            {/* Error */}
+            {error && (
+              <div style={{ background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:"12px", padding:"12px 16px", fontSize:"13px", color:C.danger }}>
+                {error}
+              </div>
+            )}
+
+            {/* Bet info */}
+            {bet && (
+              <div style={{ background:C.chalkboard, borderRadius:"14px", padding:"14px 16px", display:"flex", gap:"12px", alignItems:"center" }}>
+                <div style={{ fontSize:"28px" }}>⚔️</div>
+                <div>
+                  <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.accentSoft, letterSpacing:"0.1em", marginBottom:"2px" }}>UPLOADING FOR BET</div>
+                  <div style={{ fontSize:"14px", fontWeight:"600", color:"#fff" }}>{bet.description || `${bet.reps || ""} ${bet.forfeit || "Forfeit"}`}</div>
+                </div>
+              </div>
+            )}
+
+            {/* Upload button */}
+            <button type="button"
+              onClick={handleUpload}
+              disabled={!file || uploading}
+              style={{
+                width:"100%", padding:"18px",
+                background: (!file || uploading) ? C.page : C.chalkboard,
+                border:`1px solid ${(!file || uploading) ? C.border : "transparent"}`,
+                borderRadius:"16px",
+                fontFamily:"monospace", fontSize:"18px", letterSpacing:"0.06em", fontWeight:"700",
+                color: (!file || uploading) ? C.muted : C.accentSoft,
+                cursor: (!file || uploading) ? "not-allowed" : "pointer",
+                transition:"all 0.2s",
+              }}>
+              {uploading ? "⏳ UPLOADING..." : "💀 POST FORFEIT"}
             </button>
-            <button onClick={() => fileRef.current?.click()} style={{ background: T.bg1, border: `1.5px solid ${T.borderMid}`, borderRadius: T.r16, padding: "20px 16px", display: "flex", flexDirection: "column", alignItems: "center", gap: "8px", cursor: "pointer", boxShadow: T.shadowSm }}>
-              <span style={{ fontSize: "28px" }}>📁</span>
-              <span style={{ fontFamily: T.fontDisplay, fontSize: "16px", color: T.panel, letterSpacing: "0.04em" }}>Upload File</span>
-            </button>
-            <input ref={fileRef} type="file" accept="video/*" style={{ display: "none" }} onChange={pickFile} />
-          </div>
-        )}
 
-        {uploading && (
-          <div style={{ background: T.bg1, border: `1px solid ${T.borderCard}`, borderRadius: T.r16, padding: "16px", marginBottom: "16px", boxShadow: T.shadowCard }}>
-            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "10px" }}>
-              <div style={{ fontFamily: T.fontMono, fontSize: "12px", color: T.textMuted }}>Uploading proof...</div>
-              <div style={{ fontFamily: T.fontDisplay, fontSize: "20px", color: T.accent }}>{progress}%</div>
+            <div style={{ textAlign:"center", fontSize:"11px", color:C.muted, fontFamily:"monospace" }}>
+              Max 100 MB · Your opponent will need to approve or dispute
             </div>
-            <div style={{ height: "6px", background: T.bg3, borderRadius: "3px", overflow: "hidden" }}>
-              <div style={{ height: "100%", width: `${progress}%`, background: T.accent, borderRadius: "3px", transition: "width 0.3s ease" }} />
-            </div>
-          </div>
+          </>
         )}
-
-        {error && <div style={{ background: T.redLight, border: `1px solid ${T.redBorder}`, borderRadius: T.r12, padding: "12px 16px", fontFamily: T.fontBody, fontSize: "14px", color: T.red, marginBottom: "12px" }}>{error}</div>}
-
-        <button onClick={upload} disabled={uploading || !file} style={{ width: "100%", background: file ? T.panel : T.bg3, border: "none", borderRadius: T.r16, padding: "18px 24px", fontFamily: T.fontDisplay, fontSize: "22px", letterSpacing: "0.06em", color: file ? T.accent : T.textMuted, cursor: file ? "pointer" : "default", boxShadow: file ? "0 4px 20px rgba(5,46,22,0.2)" : "none", marginBottom: "10px", transition: "all 0.2s" }}>
-          {uploading ? "Uploading..." : "START SWEATING →"}
-        </button>
-        <div style={{ textAlign: "center", fontFamily: T.fontMono, fontSize: "11px", color: T.textMuted }}>
-          Optional: Record proof to flex on {bet?.createdByName?.split(" ")[0] || "them"}
-        </div>
       </div>
     </div>
   );

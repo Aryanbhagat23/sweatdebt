@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { db } from "../firebase";
 import {
-  collection, onSnapshot, doc, updateDoc, increment, getDocs,
+  collection, onSnapshot, doc, updateDoc, deleteDoc,
+  increment, getDocs, getDoc,
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import T from "../theme";
@@ -27,7 +28,7 @@ export default function Feed({ user, onBellClick }) {
       .catch(() => {});
   }, [user]);
 
-  // load videos
+  // load videos (real-time so jury updates reflect instantly)
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "videos"), snap => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -60,13 +61,11 @@ export default function Feed({ user, onBellClick }) {
 
   return (
     <div style={{ position:"relative", height:"100vh", background:"#000" }}>
-
       {/* STICKY HEADER */}
       <div style={{
         position:"absolute", top:0, left:0, right:0, zIndex:200,
         background:"linear-gradient(to bottom, rgba(5,46,22,0.92) 0%, rgba(5,46,22,0.5) 70%, transparent 100%)",
         paddingTop:"env(safe-area-inset-top, 0px)",
-        pointerEvents:"auto",
       }}>
         <div style={{ display:"flex", alignItems:"center", gap:"8px", padding:"12px 16px 20px" }}>
           <span style={{ fontFamily:T.fontDisplay, fontSize:"20px", color:"#fff", letterSpacing:"0.04em", fontStyle:"italic", flexShrink:0 }}>
@@ -79,7 +78,7 @@ export default function Feed({ user, onBellClick }) {
               { key:"trending", label:"🔥 Hot"  },
             ].map(t => (
               <button key={t.key} type="button"
-                onClick={() => { setActiveTab(t.key); }}
+                onClick={() => setActiveTab(t.key)}
                 style={{
                   background: activeTab === t.key ? "rgba(255,255,255,0.25)" : "rgba(255,255,255,0.08)",
                   border: activeTab === t.key ? "1px solid rgba(255,255,255,0.5)" : "1px solid rgba(255,255,255,0.15)",
@@ -94,8 +93,7 @@ export default function Feed({ user, onBellClick }) {
               >{t.label}</button>
             ))}
           </div>
-          {/* Notification bell — stop propagation so it works */}
-          <div style={{ flexShrink:0 }} onClick={e => { e.stopPropagation(); onBellClick?.(); }}>
+          <div style={{ flexShrink:0 }}>
             <NotificationBell user={user} onClick={onBellClick} light />
           </div>
         </div>
@@ -110,6 +108,7 @@ export default function Feed({ user, onBellClick }) {
         scrollbarWidth:"none",
         msOverflowStyle:"none",
       }}>
+        <style>{`::-webkit-scrollbar{display:none}`}</style>
 
         {filtered.length === 0 ? (
           <div style={{ height:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"12px", scrollSnapAlign:"start" }}>
@@ -148,22 +147,43 @@ export default function Feed({ user, onBellClick }) {
   );
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   REEL PAGE — each one snaps to full screen
+───────────────────────────────────────────────────────────────── */
 function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount }) {
   const [liked,     setLiked]     = useState(false);
   const [likes,     setLikes]     = useState(video.likes || 0);
   const [approved,  setApproved]  = useState(video.approved || false);
   const [disputed,  setDisputed]  = useState(video.disputed || false);
+  const [jurors,    setJurors]    = useState(video.jurors || []);
+  const [juryStatus, setJuryStatus] = useState(video.juryStatus || null);
   const [approving, setApproving] = useState(false);
+  const [playing,   setPlaying]   = useState(false);
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleting,   setDeleting]  = useState(false);
+  const [editingDesc, setEditingDesc] = useState(false);
+  const [descDraft,   setDescDraft]  = useState(video.description || "");
+  const [savingDesc,  setSavingDesc] = useState(false);
   const vidRef  = useRef(null);
   const pageRef = useRef(null);
 
+  // sync from real-time updates (parent passes updated video on each render)
+  useEffect(() => {
+    setApproved(video.approved || false);
+    setDisputed(video.disputed || false);
+    setJurors(video.jurors || []);
+    setJuryStatus(video.juryStatus || null);
+    setLikes(video.likes || 0);
+  }, [video.approved, video.disputed, video.jurors, video.juryStatus, video.likes]);
+
+  // auto play when snapped into view
   useEffect(() => {
     const el = pageRef.current;
     if (!el) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) vidRef.current?.play().catch(() => {});
-        else try { vidRef.current?.pause(); } catch(e) {}
+        if (entry.isIntersecting) { vidRef.current?.play().catch(()=>{}); setPlaying(true); }
+        else                       { vidRef.current?.pause();              setPlaying(false); }
       },
       { threshold: 0.8 }
     );
@@ -171,12 +191,22 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
     return () => observer.disconnect();
   }, []);
 
-  const handleLike = async () => {
-    const next = !liked;
-    setLiked(next); setLikes(l => next ? l+1 : l-1);
-    try { await updateDoc(doc(db,"videos",video.id), { likes: increment(next?1:-1) }); } catch(e) {}
+  const togglePlay = () => {
+    const v = vidRef.current;
+    if (!v) return;
+    if (v.paused) { v.play().catch(()=>{}); setPlaying(true); }
+    else           { v.pause(); setPlaying(false); }
   };
 
+  /* ── Like ── */
+  const handleLike = async () => {
+    const next = !liked;
+    setLiked(next);
+    setLikes(l => next ? l+1 : l-1);
+    try { await updateDoc(doc(db,"videos",video.id), { likes: increment(next?1:-1) }); } catch(e){}
+  };
+
+  /* ── Approve (opponent confirms the forfeit is real) ── */
   const handleApprove = async () => {
     setApproving(true);
     try {
@@ -184,69 +214,214 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
       if (video.betId && video.betId !== "general")
         await updateDoc(doc(db,"bets",video.betId), { status:"lost" });
       setApproved(true);
-    } catch(e) {}
+    } catch(e){}
     setApproving(false);
   };
 
+  /* ── Dispute → selects jury from uploader's friends ── */
   const handleDispute = async () => {
     setApproving(true);
     try {
-      await updateDoc(doc(db,"videos",video.id), { disputed:true, approved:false });
+      // 1. Load uploader's friends
+      const friendsSnap = await getDocs(collection(db, "users", video.uploadedBy, "friends"));
+      const allFriends  = friendsSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
+
+      // 2. Exclude both bet participants from jury
+      const excluded = new Set([
+        video.uploadedBy,
+        video.betCreatedBy || null,
+        currentUser?.uid,
+      ]);
+      const eligible = allFriends.filter(f => !excluded.has(f.uid));
+
+      // 3. Pick up to 3 random — if < 3 available, use what we have
+      const shuffled = [...eligible].sort(() => Math.random() - 0.5);
+      const picked   = shuffled.slice(0, 3);
+
+      // 4. If truly zero eligible friends, fall back to "no jury" disputed state
+      const jurorList = picked.map(f => ({
+        uid:   f.uid,
+        name:  f.displayName || "Unknown",
+        photo: f.photoURL    || null,
+        vote:  null,
+      }));
+
+      const juryDeadline = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h
+
+      await updateDoc(doc(db,"videos",video.id), {
+        disputed:     true,
+        approved:     false,
+        jurors:       jurorList,
+        juryStatus:   jurorList.length > 0 ? "pending" : "no_jury",
+        juryDeadline,
+      });
       if (video.betId && video.betId !== "general")
-        await updateDoc(doc(db,"bets",video.betId), { status:"disputed" });
+        await updateDoc(doc(db,"bets",video.betId), { status:"jury" });
+
       setDisputed(true);
-    } catch(e) {}
+      setJurors(jurorList);
+      setJuryStatus(jurorList.length > 0 ? "pending" : "no_jury");
+    } catch(e){ console.error("Dispute error:", e); }
     setApproving(false);
   };
 
+  /* ── Jury vote (juror casts approve or reject) ── */
+  const handleJuryVote = async (verdict) => {
+    if (!currentUser) return;
+    setApproving(true);
+    try {
+      const updatedJurors = jurors.map(j =>
+        j.uid === currentUser.uid ? { ...j, vote: verdict } : j
+      );
+      const approveCount = updatedJurors.filter(j => j.vote === "approve").length;
+      const rejectCount  = updatedJurors.filter(j => j.vote === "reject").length;
+      const majority     = Math.ceil(updatedJurors.length / 2); // 2 of 3
+
+      const updates = { jurors: updatedJurors };
+
+      if (approveCount >= majority) {
+        // Jury says: forfeit was real ✓
+        updates.approved    = true;
+        updates.disputed    = false;
+        updates.juryStatus  = "approved";
+        if (video.betId && video.betId !== "general")
+          await updateDoc(doc(db,"bets",video.betId), { status:"lost" });
+        // Honour boost: uploader +5 (honest), disputer -5 (false dispute)
+        try {
+          const uploaderRef  = doc(db,"users",video.uploadedBy);
+          const uploaderSnap = await getDoc(uploaderRef);
+          if (uploaderSnap.exists()) {
+            const h = uploaderSnap.data().honour ?? 100;
+            await updateDoc(uploaderRef, { honour: Math.min(100, h + 5) });
+          }
+          if (currentUser?.uid) {
+            const dispRef  = doc(db,"users",currentUser.uid);
+            const dispSnap = await getDoc(dispRef);
+            if (dispSnap.exists()) {
+              const h2 = dispSnap.data().honour ?? 100;
+              await updateDoc(dispRef, { honour: Math.max(0, h2 - 5) });
+            }
+          }
+        } catch(e){}
+      } else if (rejectCount >= majority) {
+        // Jury says: forfeit was fake ✗ — Debt Dodger
+        updates.juryStatus  = "rejected";
+        updates.approved    = false;
+        if (video.betId && video.betId !== "general")
+          await updateDoc(doc(db,"bets",video.betId), { status:"disputed" });
+        // Honour penalty: uploader -15
+        try {
+          const uploaderRef  = doc(db,"users",video.uploadedBy);
+          const uploaderSnap = await getDoc(uploaderRef);
+          if (uploaderSnap.exists()) {
+            const h = uploaderSnap.data().honour ?? 100;
+            await updateDoc(uploaderRef, { honour: Math.max(0, h - 15) });
+          }
+        } catch(e){}
+      }
+
+      await updateDoc(doc(db,"videos",video.id), updates);
+      setJurors(updatedJurors);
+      if (updates.approved !== undefined)  setApproved(updates.approved);
+      if (updates.juryStatus)              setJuryStatus(updates.juryStatus);
+    } catch(e){ console.error("Jury vote error:", e); }
+    setApproving(false);
+  };
+
+  /* ── Delete own video ── */
+  const handleDelete = async () => {
+    if (deleting) return;
+    setDeleting(true);
+    try {
+      await deleteDoc(doc(db,"videos",video.id));
+      // Note: Cloudinary file stays (no backend). Only Firestore record removed.
+    } catch(e){ console.error(e); setDeleting(false); }
+  };
+
+  /* ── Save description edit ── */
+  const handleSaveDesc = async () => {
+    setSavingDesc(true);
+    try {
+      await updateDoc(doc(db,"videos",video.id), { description: descDraft.trim() });
+      setEditingDesc(false);
+    } catch(e){}
+    setSavingDesc(false);
+  };
+
+  /* ── Share ── */
   const handleShare = async () => {
     try {
       if (navigator.share) await navigator.share({ title:"SweatDebt forfeit", url:window.location.href });
       else await navigator.clipboard?.writeText(window.location.href);
-    } catch(e) {}
+    } catch(e){}
   };
 
-  const canVerdict = !approved && !disputed && (
-    video.uploadedBy     === currentUser?.uid   ||
-    video.opponentEmail  === currentUser?.email ||
-    video.createdByEmail === currentUser?.email ||
-    video.betCreatedBy   === currentUser?.uid
-  );
+  /* ── Who gets to do what ── */
+  const isOwner    = video.uploadedBy === currentUser?.uid;
+  const canVerdict = !approved && !disputed &&
+    (video.uploadedBy     === currentUser?.uid ||
+     video.opponentEmail  === currentUser?.email ||
+     video.createdByEmail === currentUser?.email ||
+     video.betCreatedBy   === currentUser?.uid);
 
+  const myJurorEntry = jurors.find(j => j.uid === currentUser?.uid);
+  const isJuror      = !!myJurorEntry && myJurorEntry.vote === null && juryStatus === "pending";
+  const votesIn      = jurors.filter(j => j.vote !== null).length;
+  const totalJurors  = jurors.length;
+
+  /* ── Render ── */
   return (
-    <div ref={pageRef} style={{
-      position:"relative", height:"100vh", width:"100%",
-      scrollSnapAlign:"start", scrollSnapStop:"always",
-      overflow:"hidden", background:"#000",
-      display:"flex", alignItems:"center", justifyContent:"center",
-    }}>
-      <video ref={vidRef} src={video.videoUrl}
+    <div
+      ref={pageRef}
+      style={{
+        position:"relative", height:"100vh", width:"100%",
+        scrollSnapAlign:"start", scrollSnapStop:"always",
+        overflow:"hidden", background:"#000",
+        display:"flex", alignItems:"center", justifyContent:"center",
+      }}
+    >
+      {/* VIDEO */}
+      <video
+        ref={vidRef}
+        src={video.videoUrl}
+        onClick={togglePlay}
         style={{ width:"100%", height:"100%", objectFit:"contain", display:"block", cursor:"pointer" }}
         loop playsInline
-        onClick={() => { const v=vidRef.current; if(!v) return; v.paused?v.play().catch(()=>{}):v.pause(); }}
       />
 
+      {/* play icon overlay */}
+      {!playing && (
+        <div style={{ position:"absolute", width:"64px", height:"64px", borderRadius:"50%", background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"26px", pointerEvents:"none" }}>▶</div>
+      )}
+
       {/* bottom gradient */}
-      <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"55%", background:"linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.25) 65%, transparent 100%)", pointerEvents:"none" }}/>
+      <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"65%", background:"linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.25) 65%, transparent 100%)", pointerEvents:"none" }}/>
 
       {/* status badge */}
-      <div style={{ position:"absolute", top:"72px", left:"14px", zIndex:10 }}>
-        {approved  && <Bdg bg="rgba(16,185,129,0.9)"  color="#052e16" text="APPROVED ✓" />}
-        {disputed  && <Bdg bg="rgba(239,68,68,0.9)"   color="#fff"    text="DISPUTED ✗" />}
-        {!approved && !disputed && <Bdg bg="rgba(5,46,22,0.8)" color="#10b981" text="FORFEIT 💀" />}
+      <div style={{ position:"absolute", top:"72px", left:"14px", zIndex:10, display:"flex", gap:"6px" }}>
+        {approved && juryStatus !== "pending" && <Bdg bg="rgba(16,185,129,0.9)" color="#052e16" text="APPROVED ✓" />}
+        {juryStatus === "approved" && <Bdg bg="rgba(16,185,129,0.9)" color="#052e16" text="JURY ✓ HONEST" />}
+        {juryStatus === "rejected" && <Bdg bg="rgba(239,68,68,0.9)" color="#fff" text="JURY ✗ FAKE" />}
+        {juryStatus === "pending"  && <Bdg bg="rgba(245,166,35,0.9)" color="#052e16" text={`⚖️ JURY ${votesIn}/${totalJurors}`} />}
+        {!approved && !disputed && !juryStatus && <Bdg bg="rgba(5,46,22,0.8)" color="#10b981" text="FORFEIT 💀" />}
       </div>
 
-      {/* right side buttons */}
-      <div style={{ position:"absolute", right:"12px", bottom:"180px", display:"flex", flexDirection:"column", alignItems:"center", gap:"20px", zIndex:10 }}>
-        <SBtn icon={liked?"❤️":"🤍"} count={likes}        label="Like"    onClick={handleLike} />
-        <SBtn icon="💬"               count={commentCount} label="Comment" onClick={e=>{ e.stopPropagation(); onCommentOpen(); }} />
-        <SBtn icon="↗"               count={null}         label="Share"   onClick={handleShare} />
-        <SBtn icon="⚔️"              count={null}         label="Bet"     onClick={()=>onNavigate("/create")} />
+      {/* ── RIGHT SIDE BUTTONS ── */}
+      <div style={{ position:"absolute", right:"12px", bottom:"200px", display:"flex", flexDirection:"column", alignItems:"center", gap:"20px", zIndex:10 }}>
+        <SideBtn icon={liked ? "❤️" : "🤍"} count={likes}        label="Like"    onClick={handleLike} />
+        <SideBtn icon="💬"                   count={commentCount} label="Comment" onClick={onCommentOpen} />
+        <SideBtn icon="↗"                    count={null}         label="Share"   onClick={handleShare} />
+        <SideBtn icon="⚔️"                   count={null}         label="Bet"     onClick={() => onNavigate("/create")} />
+        {/* Delete button — only owner sees it */}
+        {isOwner && (
+          <SideBtn icon="🗑️" count={null} label="Delete" onClick={() => setShowDelete(true)} />
+        )}
       </div>
 
-      {/* bottom info */}
+      {/* ── BOTTOM INFO ── */}
       <div style={{ position:"absolute", bottom:"80px", left:"14px", right:"72px", zIndex:10 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"10px", cursor:"pointer" }}
+        {/* user row */}
+        <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"8px", cursor:"pointer" }}
           onClick={() => onNavigate(`/profile/${video.uploadedBy}`)}>
           {video.uploaderPhoto
             ? <img src={video.uploaderPhoto} alt="" style={{ width:"38px", height:"38px", borderRadius:"50%", objectFit:"cover", border:"2px solid #10b981" }}/>
@@ -258,13 +433,57 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
             <div style={{ fontFamily:T.fontBody, fontSize:"14px", fontWeight:"600", color:"#fff" }}>
               @{(video.uploadedByName||"user").toLowerCase().replace(/\s/g,"")}
             </div>
-            <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:"rgba(255,255,255,0.5)" }}>
+            <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:"rgba(255,255,255,0.5)" }}>
               {ago(video.createdAt)}
             </div>
           </div>
+          {/* edit description pencil — own videos only */}
+          {isOwner && !editingDesc && (
+            <button type="button"
+              onClick={e => { e.stopPropagation(); setEditingDesc(true); }}
+              style={{ marginLeft:"auto", background:"rgba(255,255,255,0.12)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:"20px", padding:"4px 10px", fontSize:"11px", color:"rgba(255,255,255,0.7)", cursor:"pointer" }}>
+              ✏️ edit caption
+            </button>
+          )}
         </div>
 
-        {canVerdict && (
+        {/* Description text */}
+        {!editingDesc && video.description && (
+          <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:"rgba(255,255,255,0.85)", lineHeight:"1.4", marginBottom:"10px", padding:"6px 10px", background:"rgba(0,0,0,0.35)", borderRadius:"8px", backdropFilter:"blur(4px)" }}>
+            {video.description}
+          </div>
+        )}
+
+        {/* Edit description inline */}
+        {editingDesc && (
+          <div style={{ marginBottom:"10px" }}>
+            <textarea
+              value={descDraft}
+              onChange={e => setDescDraft(e.target.value)}
+              placeholder="Add a caption…"
+              maxLength={200}
+              rows={2}
+              autoFocus
+              onClick={e => e.stopPropagation()}
+              style={{ width:"100%", background:"rgba(0,0,0,0.6)", border:"1px solid rgba(255,255,255,0.3)", borderRadius:"10px", padding:"10px 12px", color:"#fff", fontSize:"13px", fontFamily:"system-ui", outline:"none", resize:"none", lineHeight:"1.4", boxSizing:"border-box", backdropFilter:"blur(8px)" }}
+            />
+            <div style={{ display:"flex", gap:"6px", marginTop:"6px" }}>
+              <button type="button" onClick={handleSaveDesc} disabled={savingDesc}
+                style={{ flex:1, padding:"8px", background:"rgba(16,185,129,0.8)", border:"none", borderRadius:"8px", color:"#fff", fontSize:"12px", fontWeight:"700", cursor:"pointer" }}>
+                {savingDesc ? "..." : "✓ Save"}
+              </button>
+              <button type="button" onClick={() => { setEditingDesc(false); setDescDraft(video.description||""); }}
+                style={{ padding:"8px 14px", background:"rgba(255,255,255,0.1)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:"8px", color:"#fff", fontSize:"12px", cursor:"pointer" }}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── VERDICT AREA ── */}
+
+        {/* Normal approve/dispute (not yet voted, not jury) */}
+        {canVerdict && !disputed && !approved && (
           <div style={{ display:"flex", gap:"8px" }}>
             <button type="button" onClick={handleApprove} disabled={approving}
               style={{ flex:1, padding:"11px", background:"rgba(16,185,129,0.9)", border:"none", borderRadius:"12px", fontFamily:T.fontDisplay, fontSize:"17px", letterSpacing:"0.04em", color:"#052e16", cursor:"pointer", opacity:approving?0.5:1 }}>
@@ -276,14 +495,89 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
             </button>
           </div>
         )}
-        {approved && <div style={{ background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#10b981" }}>✓ Forfeit approved! 🏆</div>}
-        {disputed && <div style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#ef4444" }}>⚠ Disputed — going to jury...</div>}
+
+        {/* Jury vote buttons (for the selected jurors) */}
+        {isJuror && (
+          <div>
+            <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:"rgba(245,166,35,0.9)", letterSpacing:"0.08em", marginBottom:"6px", textAlign:"center" }}>
+              ⚖️ YOU'VE BEEN SELECTED AS A JUROR
+            </div>
+            <div style={{ fontSize:"12px", color:"rgba(255,255,255,0.6)", fontFamily:T.fontBody, marginBottom:"8px", textAlign:"center" }}>
+              Was this forfeit real? Vote honestly.
+            </div>
+            <div style={{ display:"flex", gap:"8px" }}>
+              <button type="button" onClick={() => handleJuryVote("approve")} disabled={approving}
+                style={{ flex:1, padding:"12px", background:"rgba(16,185,129,0.9)", border:"none", borderRadius:"12px", fontFamily:T.fontDisplay, fontSize:"16px", letterSpacing:"0.04em", color:"#052e16", cursor:"pointer", opacity:approving?0.5:1 }}>
+                ✓ LEGIT
+              </button>
+              <button type="button" onClick={() => handleJuryVote("reject")} disabled={approving}
+                style={{ flex:1, padding:"12px", background:"rgba(239,68,68,0.12)", border:"2px solid rgba(239,68,68,0.65)", borderRadius:"12px", fontFamily:T.fontDisplay, fontSize:"16px", letterSpacing:"0.04em", color:"#ef4444", cursor:"pointer", opacity:approving?0.5:1 }}>
+                ✗ FAKE
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Jury already voted by this juror */}
+        {myJurorEntry && myJurorEntry.vote !== null && juryStatus === "pending" && (
+          <div style={{ background:"rgba(245,166,35,0.15)", border:"1px solid rgba(245,166,35,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#f5a623", textAlign:"center" }}>
+            ⚖️ You voted · waiting for {totalJurors - votesIn} more juror{totalJurors - votesIn !== 1 ? "s" : ""}
+          </div>
+        )}
+
+        {/* Jury pending — show spectators */}
+        {juryStatus === "pending" && !isJuror && !(myJurorEntry?.vote) && (
+          <div style={{ background:"rgba(245,166,35,0.12)", border:"1px solid rgba(245,166,35,0.3)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#f5a623" }}>
+            ⚖️ Disputed — jury voting in progress ({votesIn}/{totalJurors} voted)
+          </div>
+        )}
+
+        {/* Final verdicts */}
+        {approved && juryStatus !== "pending" && (
+          <div style={{ background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#10b981" }}>
+            ✓ Forfeit approved! 🏆
+          </div>
+        )}
+        {juryStatus === "approved" && (
+          <div style={{ background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#10b981" }}>
+            ⚖️ Jury verdict: LEGIT — honour restored ✓
+          </div>
+        )}
+        {juryStatus === "rejected" && (
+          <div style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#ef4444" }}>
+            ⚖️ Jury verdict: FAKE — Debt Dodger 💀 (-15 honour)
+          </div>
+        )}
       </div>
+
+      {/* ── DELETE CONFIRMATION SHEET ── */}
+      {showDelete && (
+        <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.75)", zIndex:300, display:"flex", alignItems:"flex-end", justifyContent:"center" }}
+          onClick={() => setShowDelete(false)}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width:"100%", maxWidth:"480px", background:"#1a1a1a", borderRadius:"20px 20px 0 0", padding:"20px 20px calc(20px + env(safe-area-inset-bottom, 0px))" }}>
+            <div style={{ width:"36px", height:"4px", background:"rgba(255,255,255,0.2)", borderRadius:"2px", margin:"0 auto 20px" }}/>
+            <div style={{ fontSize:"18px", fontWeight:"700", color:"#fff", marginBottom:"8px" }}>Delete Video?</div>
+            <div style={{ fontSize:"13px", color:"rgba(255,255,255,0.5)", marginBottom:"20px", lineHeight:"1.5" }}>
+              This will remove the video from SweatDebt permanently. The forfeit record on your bet will remain, but the video won't be visible in the feed or on your profile.
+            </div>
+            <button type="button" onClick={handleDelete} disabled={deleting}
+              style={{ width:"100%", padding:"14px", background:"rgba(239,68,68,0.9)", border:"none", borderRadius:"14px", color:"#fff", fontSize:"16px", fontWeight:"700", cursor:"pointer", marginBottom:"10px", opacity:deleting?0.5:1 }}>
+              {deleting ? "Deleting..." : "🗑️ Yes, Delete Video"}
+            </button>
+            <button type="button" onClick={() => setShowDelete(false)}
+              style={{ width:"100%", padding:"14px", background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:"14px", color:"rgba(255,255,255,0.7)", fontSize:"16px", cursor:"pointer" }}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function SBtn({ icon, count, label, onClick }) {
+/* ─── helpers ─── */
+function SideBtn({ icon, count, label, onClick }) {
   const [p, setP] = useState(false);
   return (
     <div
@@ -292,13 +586,13 @@ function SBtn({ icon, count, label, onClick }) {
       onClick={onClick}
       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"3px", cursor:"pointer", transform:p?"scale(0.88)":"scale(1)", transition:"transform 0.15s cubic-bezier(0.34,1.56,0.64,1)" }}
     >
-      <div style={{ width:"46px", height:"46px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.22)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"20px", color: "aqua" }}>
+      <div style={{ width:"46px", height:"46px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"20px", color: "aqua" }}>
         {icon}
       </div>
       {count !== null && count !== undefined && (
-        <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"11px", color:"rgba(255,255,255,0.9)", fontWeight:"500" }}>{count}</div>
+        <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:"rgba(255,255,255,0.9)", fontWeight:"500" }}>{count}</div>
       )}
-      <div style={{ fontFamily:"'DM Mono',monospace", fontSize:"9px", color:"rgba(255,255,255,0.45)", letterSpacing:"0.05em" }}>{label.toUpperCase()}</div>
+      <div style={{ fontFamily:T.fontMono, fontSize:"9px", color:"rgba(255,255,255,0.45)", letterSpacing:"0.05em" }}>{label.toUpperCase()}</div>
     </div>
   );
 }
