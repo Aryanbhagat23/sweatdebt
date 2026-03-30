@@ -48,9 +48,9 @@ export default function CreateBet({ user }) {
   const [forfeit,        setForfeit]        = useState(null);
   const [reps,           setReps]           = useState("");
   const [description,    setDescription]    = useState("");
-  const [opponentMode,   setOpponentMode]   = useState("email"); // email | friend
+  const [opponentMode,   setOpponentMode]   = useState("email");
   const [opponentEmail,  setOpponentEmail]  = useState("");
-  const [opponentFriend, setOpponentFriend] = useState(null);   // { uid, displayName, email, photoURL }
+  const [opponentFriend, setOpponentFriend] = useState(null);
   const [deadline,       setDeadline]       = useState(48);
   const [friends,        setFriends]        = useState([]);
   const [loading,        setLoading]        = useState(false);
@@ -63,7 +63,6 @@ export default function CreateBet({ user }) {
       .then(snap => {
         const list = snap.docs.map(d => ({ uid:d.id, ...d.data() }));
         setFriends(list);
-        // auto-select if coming from profile page
         if (prefilledUid) {
           const found = list.find(f => f.uid === prefilledUid);
           if (found) { setOpponentFriend(found); setOpponentMode("friend"); }
@@ -72,18 +71,16 @@ export default function CreateBet({ user }) {
       .catch(() => {});
   }, [user]);
 
-  /* ── send auto-message to the challenged friend ── */
+  /* ── send auto-message to challenged friend ── */
   const sendChallengeMessage = async (betId, opponentUid, opponentName) => {
     try {
-      // create/find DM conversation
       const participants = [user.uid, opponentUid].sort();
       const convoId = participants.join("_");
 
-      // ensure convo doc exists
       await setDoc(doc(db, "conversations", convoId), {
         participants,
         participantNames: {
-          [user.uid]:  user.displayName || "You",
+          [user.uid]:    user.displayName || "You",
           [opponentUid]: opponentName,
         },
         lastMessage: "⚔️ Challenge sent!",
@@ -91,7 +88,6 @@ export default function CreateBet({ user }) {
         createdAt:   serverTimestamp(),
       }, { merge: true });
 
-      // send the message
       const forfeitLabel = forfeit === "custom" ? reps : `${reps} ${forfeit}`;
       const msgText = `⚔️ I just challenged you to a bet!\n\n🏅 Sport: ${sport || "Any"}\n💀 Forfeit if you lose: ${forfeitLabel}\n🕐 Deadline: ${DEADLINES.find(d=>d.value===deadline)?.label}\n\nAccept or decline on the Challenges tab. Good luck! 😤`;
 
@@ -105,7 +101,6 @@ export default function CreateBet({ user }) {
         read:        false,
       });
     } catch(e) {
-      // message sending is optional — don't fail the whole bet creation
       console.warn("Auto-message failed (non-critical):", e);
     }
   };
@@ -115,7 +110,7 @@ export default function CreateBet({ user }) {
     setError("");
 
     const opponent = opponentMode === "friend" ? opponentFriend : null;
-    const email    = opponentMode === "friend" ? (opponent?.email||"") : opponentEmail.trim();
+    const email    = opponentMode === "friend" ? (opponent?.email || "") : opponentEmail.trim();
 
     if (!email && !opponent?.uid) {
       setError("Please enter an opponent email or pick a friend.");
@@ -154,17 +149,22 @@ export default function CreateBet({ user }) {
         createdAt:       serverTimestamp(),
       });
 
-      /* ── AUTO-MESSAGE if opponent is a friend ── */
       if (opponent?.uid) {
-        await sendChallengeMessage(betDoc.id, opponent.uid, opponent.displayName || opponent.name || "Opponent");
+        await sendChallengeMessage(
+          betDoc.id,
+          opponent.uid,
+          opponent.displayName || opponent.name || "Opponent"
+        );
       }
 
-      navigate("/bets");
+      // ✅ navigate to "/" (Bets page) — not "/bets" which doesn't exist
+      navigate("/");
+
     } catch(e) {
       console.error(e);
       setError("Something went wrong. Try again.");
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const canNext = {
@@ -182,18 +182,28 @@ export default function CreateBet({ user }) {
 
       {/* header */}
       <div style={{ display:"flex", alignItems:"center", gap:"12px", padding:"52px 16px 20px" }}>
-        <button type="button"
-          onClick={() => step > 1 ? setStep(s=>s-1) : navigate("/bets")}
-          style={{ width:"44px", height:"44px", borderRadius:"50%", background:C.card, border:`1px solid ${C.border}`, color:C.heading, fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+        <button
+          type="button"
+          onClick={() => step > 1 ? setStep(s => s - 1) : navigate("/")}
+          style={{
+            width:"44px", height:"44px", borderRadius:"50%",
+            background:C.card, border:`1px solid ${C.border}`,
+            color:C.heading, fontSize:"20px", cursor:"pointer",
+            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+          }}>
           ←
         </button>
         <div style={{ flex:1 }}>
-          <div style={{ fontFamily:T.fontDisplay, fontSize:"24px", color:C.heading, letterSpacing:"0.04em", fontStyle:"italic" }}>New Bet</div>
-          <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:C.muted }}>step {step} of 4 — {STEP_TITLES[step-1]}</div>
+          <div style={{ fontFamily:T.fontDisplay, fontSize:"24px", color:C.heading, letterSpacing:"0.04em", fontStyle:"italic" }}>
+            New Bet
+          </div>
+          <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:C.muted }}>
+            step {step} of 4 — {STEP_TITLES[step - 1]}
+          </div>
         </div>
       </div>
 
-      {/* progress */}
+      {/* progress bar */}
       <div style={{ height:"3px", background:C.border, margin:"0 16px 24px" }}>
         <div style={{ height:"100%", width:`${(step/4)*100}%`, background:C.accent, borderRadius:"2px", transition:"width 0.3s" }}/>
       </div>
@@ -268,7 +278,6 @@ export default function CreateBet({ user }) {
               Who are you challenging?
             </div>
 
-            {/* toggle */}
             <div style={{ display:"flex", background:C.card, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"4px" }}>
               <button type="button" onClick={() => setOpponentMode("friend")}
                 style={{ flex:1, padding:"10px", borderRadius:"10px", fontFamily:T.fontBody, fontSize:"13px", fontWeight:"500", cursor:"pointer", background:opponentMode==="friend"?C.heading:"transparent", color:opponentMode==="friend"?C.accent:C.muted, border:"none", transition:"all 0.2s" }}>
@@ -301,7 +310,7 @@ export default function CreateBet({ user }) {
                         }
                         <div style={{ flex:1 }}>
                           <div style={{ fontFamily:T.fontBody, fontSize:"14px", fontWeight:"600", color:sel?"#fff":C.heading }}>{f.displayName || f.name}</div>
-                          <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:C.muted }}>@{f.username||f.displayName?.toLowerCase().replace(/\s/g,"")}</div>
+                          <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:C.muted }}>@{f.username || f.displayName?.toLowerCase().replace(/\s/g,"")}</div>
                         </div>
                         {sel && <div style={{ width:"24px", height:"24px", borderRadius:"50%", background:C.accent, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"14px", color:C.heading, flexShrink:0 }}>✓</div>}
                       </div>
@@ -344,13 +353,13 @@ export default function CreateBet({ user }) {
               ))}
             </div>
 
-            {/* summary */}
+            {/* summary card */}
             <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"16px" }}>
               <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:C.muted, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"12px" }}>Bet summary</div>
               {[
-                { label:"Sport",    val: sport ? `${SPORTS.find(s=>s.id===sport)?.icon} ${sport}` : "—" },
+                { label:"Sport",    val: sport   ? `${SPORTS.find(s=>s.id===sport)?.icon} ${sport}` : "—" },
                 { label:"Forfeit",  val: forfeit ? `${FORFEITS.find(f=>f.id===forfeit)?.icon} ${reps} ${forfeit}` : "—" },
-                { label:"Opponent", val: opponentMode==="friend" ? (opponentFriend?.displayName||"—") : (opponentEmail||"—") },
+                { label:"Opponent", val: opponentMode==="friend" ? (opponentFriend?.displayName || "—") : (opponentEmail || "—") },
                 { label:"Deadline", val: DEADLINES.find(d=>d.value===deadline)?.label },
               ].map(row => (
                 <div key={row.label} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px", gap:"12px" }}>
@@ -370,10 +379,18 @@ export default function CreateBet({ user }) {
       </div>
 
       {/* bottom button */}
-      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:"480px", padding:"16px", background:`${C.page}f0`, borderTop:`1px solid ${C.border}`, paddingBottom:"calc(16px + env(safe-area-inset-bottom, 0px))" }}>
+      <div style={{
+        position:"fixed", bottom:0,
+        left:"50%", transform:"translateX(-50%)",
+        width:"100%", maxWidth:"480px",
+        padding:"16px",
+        background:`${C.page}f0`,
+        borderTop:`1px solid ${C.border}`,
+        paddingBottom:"calc(16px + env(safe-area-inset-bottom, 0px))",
+      }}>
         {step < 4 ? (
           <button type="button"
-            onClick={() => setStep(s=>s+1)}
+            onClick={() => setStep(s => s + 1)}
             disabled={!canNext[step]}
             style={{ width:"100%", padding:"18px", background:canNext[step]?C.heading:"#e5e7eb", border:"none", borderRadius:"16px", fontFamily:T.fontDisplay, fontSize:"22px", letterSpacing:"0.06em", color:canNext[step]?C.accent:C.muted, cursor:canNext[step]?"pointer":"not-allowed", transition:"all 0.2s" }}>
             NEXT →

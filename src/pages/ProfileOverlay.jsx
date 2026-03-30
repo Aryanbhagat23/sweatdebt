@@ -115,7 +115,7 @@ function Toggle({ value, onChange }){
 }
 
 // ─── main component ────────────────────────────────────────────────────────────
-export default function ProfileOverlay({ user, onClose }){
+export default function ProfileOverlay({ user, isOpen, onClose }){
   const navigate = useNavigate();
 
   // profile data
@@ -134,14 +134,14 @@ export default function ProfileOverlay({ user, onClose }){
   const [pubLeader,   setPubLeader]   = useState(true);
 
   // screen state
-  const [screen,     setScreen]     = useState("main"); // main | settings | faq | contact | social | badges | videos
+  const [screen,     setScreen]     = useState("main");
   const [faqOpen,    setFaqOpen]    = useState(null);
 
   // video actions
-  const [videoMenu,  setVideoMenu]  = useState(null);  // video doc being actioned
-  const [editCaption,setEditCaption]= useState(null);  // {id, text}
+  const [videoMenu,  setVideoMenu]  = useState(null);
+  const [editCaption,setEditCaption]= useState(null);
   const [captionDraft,setCaptionDraft]=useState("");
-  const [playVideo,  setPlayVideo]  = useState(null);  // video url to play full screen
+  const [playVideo,  setPlayVideo]  = useState(null);
   const [deleteConfirm,setDeleteConfirm]=useState(null);
 
   // social editing
@@ -150,7 +150,7 @@ export default function ProfileOverlay({ user, onClose }){
 
   // ── load profile ─────────────────────────────────────────────────────────────
   useEffect(()=>{
-    if(!user) return;
+    if(!user||!isOpen) return;
     const unsub = onSnapshot(doc(db,"users",user.uid), snap=>{
       if(snap.exists()){
         const d = snap.data();
@@ -167,11 +167,11 @@ export default function ProfileOverlay({ user, onClose }){
       }
     });
     return ()=>unsub();
-  },[user]);
+  },[user, isOpen]);
 
   // ── load bets for stats ───────────────────────────────────────────────────────
   useEffect(()=>{
-    if(!user) return;
+    if(!user||!isOpen) return;
     const q = query(collection(db,"bets"),
       where("participants","array-contains",user.uid));
     getDocs(q).then(snap=>{
@@ -185,20 +185,22 @@ export default function ProfileOverlay({ user, onClose }){
       });
       setStats({ total:wins+losses, wins, losses });
     });
-  },[user]);
+  },[user, isOpen]);
 
   // ── load videos ───────────────────────────────────────────────────────────────
   useEffect(()=>{
-    if(!user) return;
+    if(!user||!isOpen) return;
     const q = query(collection(db,"videos"),where("userId","==",user.uid));
     const unsub = onSnapshot(q, snap=>{
       setVideos(snap.docs.map(d=>({id:d.id,...d.data()}))
         .sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)));
     });
     return ()=>unsub();
-  },[user]);
+  },[user, isOpen]);
 
   // ── derived ───────────────────────────────────────────────────────────────────
+  // ⚠️ All hooks above — safe to return null now
+  if (!isOpen) return null;
   const tier      = getTier(profile.honourScore||0);
   const winRate   = stats.total>0 ? Math.round((stats.wins/stats.total)*100) : 0;
   const displayName = profile.displayName||user?.displayName||"Athlete";
@@ -533,8 +535,10 @@ export default function ProfileOverlay({ user, onClose }){
       display:"flex",alignItems:"flex-end",
     }} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{
-        background:MINT,width:"100%",borderRadius:"24px 24px 0 0",
+        background:MINT,width:"100%",maxWidth:"480px",
+        borderRadius:"24px 24px 0 0",
         maxHeight:"92vh",overflowY:"auto",paddingBottom:"32px",
+        margin:"0 auto",
       }}>
 
         {/* drag handle */}
@@ -696,9 +700,14 @@ export default function ProfileOverlay({ user, onClose }){
 function Overlay({ children, title, onBack }){
   return (
     <div style={{
-      position:"fixed",inset:0,background:MINT,zIndex:6000,overflowY:"auto",
-      paddingBottom:"32px",
+      position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:6000,
+      display:"flex",alignItems:"flex-end",justifyContent:"center",
     }}>
+      <div style={{
+        background:MINT,width:"100%",maxWidth:"480px",
+        borderRadius:"24px 24px 0 0",maxHeight:"92vh",overflowY:"auto",
+        paddingBottom:"32px",
+      }}>
       {/* header */}
       <div style={{
         background:CHALKBOARD,padding:"16px",
@@ -715,6 +724,7 @@ function Overlay({ children, title, onBack }){
         </span>
       </div>
       <div style={{padding:"12px 16px"}}>{children}</div>
+    </div>
     </div>
   );
 }

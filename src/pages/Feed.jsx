@@ -20,7 +20,6 @@ export default function Feed({ user, onBellClick }) {
   const [activeVideoId, setActiveVideoId] = useState(null);
   const [commentCounts, setCommentCounts] = useState({});
 
-  // load friends
   useEffect(() => {
     if (!user) return;
     getDocs(collection(db, "users", user.uid, "friends"))
@@ -28,7 +27,6 @@ export default function Feed({ user, onBellClick }) {
       .catch(() => {});
   }, [user]);
 
-  // load videos (real-time so jury updates reflect instantly)
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "videos"), snap => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -41,7 +39,6 @@ export default function Feed({ user, onBellClick }) {
     return () => unsub();
   }, []);
 
-  // filtered list
   let filtered = videos;
   if (activeTab === "friends") {
     filtered = videos.filter(v => friendUids.has(v.uploadedBy));
@@ -134,7 +131,6 @@ export default function Feed({ user, onBellClick }) {
         )}
       </div>
 
-      {/* COMMENTS PANEL */}
       {showComments && activeVideoId && (
         <CommentsPanel
           videoId={activeVideoId}
@@ -148,26 +144,25 @@ export default function Feed({ user, onBellClick }) {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   REEL PAGE — each one snaps to full screen
+   REEL PAGE
 ───────────────────────────────────────────────────────────────── */
 function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount }) {
-  const [liked,     setLiked]     = useState(false);
-  const [likes,     setLikes]     = useState(video.likes || 0);
-  const [approved,  setApproved]  = useState(video.approved || false);
-  const [disputed,  setDisputed]  = useState(video.disputed || false);
-  const [jurors,    setJurors]    = useState(video.jurors || []);
-  const [juryStatus, setJuryStatus] = useState(video.juryStatus || null);
-  const [approving, setApproving] = useState(false);
-  const [playing,   setPlaying]   = useState(false);
-  const [showDelete, setShowDelete] = useState(false);
-  const [deleting,   setDeleting]  = useState(false);
+  const [liked,       setLiked]       = useState(false);
+  const [likes,       setLikes]       = useState(video.likes || 0);
+  const [approved,    setApproved]    = useState(video.approved || false);
+  const [disputed,    setDisputed]    = useState(video.disputed || false);
+  const [jurors,      setJurors]      = useState(video.jurors || []);
+  const [juryStatus,  setJuryStatus]  = useState(video.juryStatus || null);
+  const [approving,   setApproving]   = useState(false);
+  const [playing,     setPlaying]     = useState(false);
+  const [showDelete,  setShowDelete]  = useState(false);
+  const [deleting,    setDeleting]    = useState(false);
   const [editingDesc, setEditingDesc] = useState(false);
-  const [descDraft,   setDescDraft]  = useState(video.description || "");
-  const [savingDesc,  setSavingDesc] = useState(false);
+  const [descDraft,   setDescDraft]   = useState(video.description || "");
+  const [savingDesc,  setSavingDesc]  = useState(false);
   const vidRef  = useRef(null);
   const pageRef = useRef(null);
 
-  // sync from real-time updates (parent passes updated video on each render)
   useEffect(() => {
     setApproved(video.approved || false);
     setDisputed(video.disputed || false);
@@ -176,7 +171,6 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
     setLikes(video.likes || 0);
   }, [video.approved, video.disputed, video.jurors, video.juryStatus, video.likes]);
 
-  // auto play when snapped into view
   useEffect(() => {
     const el = pageRef.current;
     if (!el) return;
@@ -198,7 +192,6 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
     else           { v.pause(); setPlaying(false); }
   };
 
-  /* ── Like ── */
   const handleLike = async () => {
     const next = !liked;
     setLiked(next);
@@ -206,7 +199,6 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
     try { await updateDoc(doc(db,"videos",video.id), { likes: increment(next?1:-1) }); } catch(e){}
   };
 
-  /* ── Approve (opponent confirms the forfeit is real) ── */
   const handleApprove = async () => {
     setApproving(true);
     try {
@@ -218,27 +210,21 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
     setApproving(false);
   };
 
-  /* ── Dispute → selects jury from uploader's friends ── */
   const handleDispute = async () => {
     setApproving(true);
     try {
-      // 1. Load uploader's friends
       const friendsSnap = await getDocs(collection(db, "users", video.uploadedBy, "friends"));
       const allFriends  = friendsSnap.docs.map(d => ({ uid: d.id, ...d.data() }));
 
-      // 2. Exclude both bet participants from jury
       const excluded = new Set([
         video.uploadedBy,
         video.betCreatedBy || null,
         currentUser?.uid,
       ]);
       const eligible = allFriends.filter(f => !excluded.has(f.uid));
-
-      // 3. Pick up to 3 random — if < 3 available, use what we have
       const shuffled = [...eligible].sort(() => Math.random() - 0.5);
       const picked   = shuffled.slice(0, 3);
 
-      // 4. If truly zero eligible friends, fall back to "no jury" disputed state
       const jurorList = picked.map(f => ({
         uid:   f.uid,
         name:  f.displayName || "Unknown",
@@ -246,7 +232,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
         vote:  null,
       }));
 
-      const juryDeadline = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48h
+      const juryDeadline = new Date(Date.now() + 48 * 60 * 60 * 1000);
 
       await updateDoc(doc(db,"videos",video.id), {
         disputed:     true,
@@ -265,7 +251,6 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
     setApproving(false);
   };
 
-  /* ── Jury vote (juror casts approve or reject) ── */
   const handleJuryVote = async (verdict) => {
     if (!currentUser) return;
     setApproving(true);
@@ -275,18 +260,15 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
       );
       const approveCount = updatedJurors.filter(j => j.vote === "approve").length;
       const rejectCount  = updatedJurors.filter(j => j.vote === "reject").length;
-      const majority     = Math.ceil(updatedJurors.length / 2); // 2 of 3
-
-      const updates = { jurors: updatedJurors };
+      const majority     = Math.ceil(updatedJurors.length / 2);
+      const updates      = { jurors: updatedJurors };
 
       if (approveCount >= majority) {
-        // Jury says: forfeit was real ✓
-        updates.approved    = true;
-        updates.disputed    = false;
-        updates.juryStatus  = "approved";
+        updates.approved   = true;
+        updates.disputed   = false;
+        updates.juryStatus = "approved";
         if (video.betId && video.betId !== "general")
           await updateDoc(doc(db,"bets",video.betId), { status:"lost" });
-        // Honour boost: uploader +5 (honest), disputer -5 (false dispute)
         try {
           const uploaderRef  = doc(db,"users",video.uploadedBy);
           const uploaderSnap = await getDoc(uploaderRef);
@@ -304,12 +286,10 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
           }
         } catch(e){}
       } else if (rejectCount >= majority) {
-        // Jury says: forfeit was fake ✗ — Debt Dodger
-        updates.juryStatus  = "rejected";
-        updates.approved    = false;
+        updates.juryStatus = "rejected";
+        updates.approved   = false;
         if (video.betId && video.betId !== "general")
           await updateDoc(doc(db,"bets",video.betId), { status:"disputed" });
-        // Honour penalty: uploader -15
         try {
           const uploaderRef  = doc(db,"users",video.uploadedBy);
           const uploaderSnap = await getDoc(uploaderRef);
@@ -322,23 +302,19 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
 
       await updateDoc(doc(db,"videos",video.id), updates);
       setJurors(updatedJurors);
-      if (updates.approved !== undefined)  setApproved(updates.approved);
-      if (updates.juryStatus)              setJuryStatus(updates.juryStatus);
+      if (updates.approved !== undefined) setApproved(updates.approved);
+      if (updates.juryStatus)             setJuryStatus(updates.juryStatus);
     } catch(e){ console.error("Jury vote error:", e); }
     setApproving(false);
   };
 
-  /* ── Delete own video ── */
   const handleDelete = async () => {
     if (deleting) return;
     setDeleting(true);
-    try {
-      await deleteDoc(doc(db,"videos",video.id));
-      // Note: Cloudinary file stays (no backend). Only Firestore record removed.
-    } catch(e){ console.error(e); setDeleting(false); }
+    try { await deleteDoc(doc(db,"videos",video.id)); }
+    catch(e){ console.error(e); setDeleting(false); }
   };
 
-  /* ── Save description edit ── */
   const handleSaveDesc = async () => {
     setSavingDesc(true);
     try {
@@ -348,7 +324,6 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
     setSavingDesc(false);
   };
 
-  /* ── Share ── */
   const handleShare = async () => {
     try {
       if (navigator.share) await navigator.share({ title:"SweatDebt forfeit", url:window.location.href });
@@ -356,20 +331,31 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
     } catch(e){}
   };
 
-  /* ── Who gets to do what ── */
-  const isOwner    = video.uploadedBy === currentUser?.uid;
-  const canVerdict = !approved && !disputed &&
-    (video.uploadedBy     === currentUser?.uid ||
-     video.opponentEmail  === currentUser?.email ||
-     video.createdByEmail === currentUser?.email ||
-     video.betCreatedBy   === currentUser?.uid);
+  // ── WHO SEES WHAT ────────────────────────────────────────────────────────────
+  const isOwner = video.uploadedBy === currentUser?.uid;
+
+  // The OPPONENT is whoever did NOT upload the video but is part of the bet.
+  // They could be identified by opponentEmail, opponentUid, betCreatedBy, or createdByEmail.
+  const isOpponent =
+    !isOwner && (
+      video.opponentUid      === currentUser?.uid  ||
+      video.betCreatedBy     === currentUser?.uid  ||
+      video.opponentEmail    === currentUser?.email ||
+      video.createdByEmail   === currentUser?.email
+    );
+
+  // Only the opponent can approve or dispute — never the uploader themselves
+  const canVerdict = isOpponent && !approved && !disputed && !juryStatus;
+
+  // Uploader sees a "waiting" message instead
+  const isWaitingForOpponent = isOwner && !approved && !disputed && !juryStatus;
 
   const myJurorEntry = jurors.find(j => j.uid === currentUser?.uid);
   const isJuror      = !!myJurorEntry && myJurorEntry.vote === null && juryStatus === "pending";
   const votesIn      = jurors.filter(j => j.vote !== null).length;
   const totalJurors  = jurors.length;
+  // ─────────────────────────────────────────────────────────────────────────────
 
-  /* ── Render ── */
   return (
     <div
       ref={pageRef}
@@ -389,36 +375,33 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
         loop playsInline
       />
 
-      {/* play icon overlay */}
       {!playing && (
         <div style={{ position:"absolute", width:"64px", height:"64px", borderRadius:"50%", background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"26px", pointerEvents:"none" }}>▶</div>
       )}
 
-      {/* bottom gradient */}
       <div style={{ position:"absolute", bottom:0, left:0, right:0, height:"65%", background:"linear-gradient(to top, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.25) 65%, transparent 100%)", pointerEvents:"none" }}/>
 
-      {/* status badge */}
+      {/* STATUS BADGE */}
       <div style={{ position:"absolute", top:"72px", left:"14px", zIndex:10, display:"flex", gap:"6px" }}>
-        {approved && juryStatus !== "pending" && <Bdg bg="rgba(16,185,129,0.9)" color="#052e16" text="APPROVED ✓" />}
-        {juryStatus === "approved" && <Bdg bg="rgba(16,185,129,0.9)" color="#052e16" text="JURY ✓ HONEST" />}
-        {juryStatus === "rejected" && <Bdg bg="rgba(239,68,68,0.9)" color="#fff" text="JURY ✗ FAKE" />}
-        {juryStatus === "pending"  && <Bdg bg="rgba(245,166,35,0.9)" color="#052e16" text={`⚖️ JURY ${votesIn}/${totalJurors}`} />}
-        {!approved && !disputed && !juryStatus && <Bdg bg="rgba(5,46,22,0.8)" color="#10b981" text="FORFEIT 💀" />}
+        {approved && juryStatus !== "pending" && <Bdg bg="rgba(16,185,129,0.9)"  color="#052e16" text="APPROVED ✓" />}
+        {juryStatus === "approved"             && <Bdg bg="rgba(16,185,129,0.9)"  color="#052e16" text="JURY ✓ HONEST" />}
+        {juryStatus === "rejected"             && <Bdg bg="rgba(239,68,68,0.9)"   color="#fff"    text="JURY ✗ FAKE" />}
+        {juryStatus === "pending"              && <Bdg bg="rgba(245,166,35,0.9)"  color="#052e16" text={`⚖️ JURY ${votesIn}/${totalJurors}`} />}
+        {!approved && !disputed && !juryStatus && <Bdg bg="rgba(5,46,22,0.8)"    color="#10b981" text="FORFEIT 💀" />}
       </div>
 
-      {/* ── RIGHT SIDE BUTTONS ── */}
+      {/* RIGHT SIDE BUTTONS */}
       <div style={{ position:"absolute", right:"12px", bottom:"200px", display:"flex", flexDirection:"column", alignItems:"center", gap:"20px", zIndex:10 }}>
         <SideBtn icon={liked ? "❤️" : "🤍"} count={likes}        label="Like"    onClick={handleLike} />
         <SideBtn icon="💬"                   count={commentCount} label="Comment" onClick={onCommentOpen} />
         <SideBtn icon="↗"                    count={null}         label="Share"   onClick={handleShare} />
         <SideBtn icon="⚔️"                   count={null}         label="Bet"     onClick={() => onNavigate("/create")} />
-        {/* Delete button — only owner sees it */}
         {isOwner && (
           <SideBtn icon="🗑️" count={null} label="Delete" onClick={() => setShowDelete(true)} />
         )}
       </div>
 
-      {/* ── BOTTOM INFO ── */}
+      {/* BOTTOM INFO */}
       <div style={{ position:"absolute", bottom:"80px", left:"14px", right:"72px", zIndex:10 }}>
         {/* user row */}
         <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"8px", cursor:"pointer" }}
@@ -437,7 +420,6 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
               {ago(video.createdAt)}
             </div>
           </div>
-          {/* edit description pencil — own videos only */}
           {isOwner && !editingDesc && (
             <button type="button"
               onClick={e => { e.stopPropagation(); setEditingDesc(true); }}
@@ -447,14 +429,14 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
           )}
         </div>
 
-        {/* Description text */}
+        {/* Description */}
         {!editingDesc && video.description && (
           <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:"rgba(255,255,255,0.85)", lineHeight:"1.4", marginBottom:"10px", padding:"6px 10px", background:"rgba(0,0,0,0.35)", borderRadius:"8px", backdropFilter:"blur(4px)" }}>
             {video.description}
           </div>
         )}
 
-        {/* Edit description inline */}
+        {/* Edit caption */}
         {editingDesc && (
           <div style={{ marginBottom:"10px" }}>
             <textarea
@@ -482,8 +464,15 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
 
         {/* ── VERDICT AREA ── */}
 
-        {/* Normal approve/dispute (not yet voted, not jury) */}
-        {canVerdict && !disputed && !approved && (
+        {/* Uploader sees "waiting" — NOT approve/dispute */}
+        {isWaitingForOpponent && (
+          <div style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:"10px", padding:"10px 14px", fontFamily:T.fontBody, fontSize:"13px", color:"rgba(255,255,255,0.6)", textAlign:"center" }}>
+            ⏳ Waiting for your opponent to review this…
+          </div>
+        )}
+
+        {/* Opponent sees APPROVE / DISPUTE */}
+        {canVerdict && (
           <div style={{ display:"flex", gap:"8px" }}>
             <button type="button" onClick={handleApprove} disabled={approving}
               style={{ flex:1, padding:"11px", background:"rgba(16,185,129,0.9)", border:"none", borderRadius:"12px", fontFamily:T.fontDisplay, fontSize:"17px", letterSpacing:"0.04em", color:"#052e16", cursor:"pointer", opacity:approving?0.5:1 }}>
@@ -496,7 +485,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
           </div>
         )}
 
-        {/* Jury vote buttons (for the selected jurors) */}
+        {/* Juror vote buttons */}
         {isJuror && (
           <div>
             <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:"rgba(245,166,35,0.9)", letterSpacing:"0.08em", marginBottom:"6px", textAlign:"center" }}>
@@ -518,15 +507,15 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
           </div>
         )}
 
-        {/* Jury already voted by this juror */}
+        {/* Juror already voted */}
         {myJurorEntry && myJurorEntry.vote !== null && juryStatus === "pending" && (
           <div style={{ background:"rgba(245,166,35,0.15)", border:"1px solid rgba(245,166,35,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#f5a623", textAlign:"center" }}>
             ⚖️ You voted · waiting for {totalJurors - votesIn} more juror{totalJurors - votesIn !== 1 ? "s" : ""}
           </div>
         )}
 
-        {/* Jury pending — show spectators */}
-        {juryStatus === "pending" && !isJuror && !(myJurorEntry?.vote) && (
+        {/* Spectator sees jury in progress */}
+        {juryStatus === "pending" && !isJuror && !myJurorEntry?.vote && (
           <div style={{ background:"rgba(245,166,35,0.12)", border:"1px solid rgba(245,166,35,0.3)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#f5a623" }}>
             ⚖️ Disputed — jury voting in progress ({votesIn}/{totalJurors} voted)
           </div>
@@ -550,7 +539,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
         )}
       </div>
 
-      {/* ── DELETE CONFIRMATION SHEET ── */}
+      {/* DELETE CONFIRMATION */}
       {showDelete && (
         <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.75)", zIndex:300, display:"flex", alignItems:"flex-end", justifyContent:"center" }}
           onClick={() => setShowDelete(false)}>
@@ -586,7 +575,7 @@ function SideBtn({ icon, count, label, onClick }) {
       onClick={onClick}
       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"3px", cursor:"pointer", transform:p?"scale(0.88)":"scale(1)", transition:"transform 0.15s cubic-bezier(0.34,1.56,0.64,1)" }}
     >
-      <div style={{ width:"46px", height:"46px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"20px", color: "aqua" }}>
+      <div style={{ width:"46px", height:"46px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"20px",color:"aqua" }}>
         {icon}
       </div>
       {count !== null && count !== undefined && (
