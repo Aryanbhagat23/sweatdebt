@@ -391,7 +391,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
       </div>
 
       {/* RIGHT SIDE BUTTONS */}
-      <div style={{ position:"absolute", right:"12px", bottom:"200px", display:"flex", flexDirection:"column", alignItems:"center", gap:"20px", zIndex:10 }}>
+      <div style={{ position:"absolute", right:"10px", top:"50%", transform:"translateY(-50%)", display:"flex", flexDirection:"column", alignItems:"center", gap:"12px", zIndex:10 }}>
         <SideBtn icon={liked ? "❤️" : "🤍"} count={likes}        label="Like"    onClick={handleLike} />
         <SideBtn icon="💬"                   count={commentCount} label="Comment" onClick={onCommentOpen} />
         <SideBtn icon="↗"                    count={null}         label="Share"   onClick={handleShare} />
@@ -402,7 +402,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
       </div>
 
       {/* BOTTOM INFO */}
-      <div style={{ position:"absolute", bottom:"80px", left:"14px", right:"72px", zIndex:10 }}>
+      <div style={{ position:"absolute", bottom:"76px", left:"14px", right:"62px", zIndex:10 }}>
         {/* user row */}
         <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"8px", cursor:"pointer" }}
           onClick={() => onNavigate(`/profile/${video.uploadedBy}`)}>
@@ -573,15 +573,27 @@ function SideBtn({ icon, count, label, onClick }) {
       onMouseDown={()=>setP(true)} onMouseUp={()=>setP(false)}
       onTouchStart={()=>setP(true)} onTouchEnd={()=>setP(false)}
       onClick={onClick}
-      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"3px", cursor:"pointer", transform:p?"scale(0.88)":"scale(1)", transition:"transform 0.15s cubic-bezier(0.34,1.56,0.64,1)" }}
+      style={{
+        display:"flex", flexDirection:"column", alignItems:"center", gap:"2px",
+        cursor:"pointer",
+        transform:p?"scale(0.85)":"scale(1)",
+        transition:"transform 0.12s cubic-bezier(0.34,1.56,0.64,1)",
+      }}
     >
-      <div style={{ width:"46px", height:"46px", borderRadius:"50%", background:"rgba(255,255,255,0.15)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.2)", display:"flex", alignItems:"center", justifyContent:"center", fontSize:"20px",color:"aqua" }}>
+      <div style={{
+        width:"36px", height:"36px", borderRadius:"50%",
+        background:"rgba(0,0,0,0.45)",
+        backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)",
+        border:"1px solid rgba(255,255,255,0.18)",
+        display:"flex", alignItems:"center", justifyContent:"center",
+        fontSize:"16px",color:"aqua"
+      }}>
         {icon}
       </div>
       {count !== null && count !== undefined && (
-        <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:"rgba(255,255,255,0.9)", fontWeight:"500" }}>{count}</div>
+        <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:"rgba(255,255,255,0.9)", fontWeight:"600" }}>{count}</div>
       )}
-      <div style={{ fontFamily:T.fontMono, fontSize:"9px", color:"rgba(255,255,255,0.45)", letterSpacing:"0.05em" }}>{label.toUpperCase()}</div>
+      <div style={{ fontFamily:T.fontMono, fontSize:"7px", color:"rgba(255,255,255,0.4)", letterSpacing:"0.04em" }}>{label.toUpperCase()}</div>
     </div>
   );
 }

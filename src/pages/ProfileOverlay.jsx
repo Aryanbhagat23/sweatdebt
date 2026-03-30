@@ -198,6 +198,18 @@ export default function ProfileOverlay({ user, isOpen, onClose }){
     return ()=>unsub();
   },[user, isOpen]);
 
+  // ── swipe down to close ──────────────────────────────────────────────────────
+  const sheetRef = useRef(null);
+  const dragStart = useRef(null);
+
+  const onTouchStart = (e) => { dragStart.current = e.touches[0].clientY; };
+  const onTouchEnd   = (e) => {
+    if (dragStart.current === null) return;
+    const dy = e.changedTouches[0].clientY - dragStart.current;
+    if (dy > 80) onClose(); // swiped down 80px → close
+    dragStart.current = null;
+  };
+
   // ── derived ───────────────────────────────────────────────────────────────────
   // ⚠️ All hooks above — safe to return null now
   if (!isOpen) return null;
@@ -534,15 +546,18 @@ export default function ProfileOverlay({ user, isOpen, onClose }){
       position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:5000,
       display:"flex",alignItems:"flex-end",
     }} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{
+      <div
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onClick={e=>e.stopPropagation()} style={{
         background:MINT,width:"100%",maxWidth:"480px",
         borderRadius:"24px 24px 0 0",
         maxHeight:"92vh",overflowY:"auto",paddingBottom:"32px",
         margin:"0 auto",
       }}>
 
-        {/* drag handle */}
-        <div style={{height:"4px",width:"44px",background:"#d1d5db",borderRadius:"2px",margin:"12px auto 0"}}/>
+        {/* drag handle — swipe this down to close */}
+        <div style={{height:"4px",width:"44px",background:"#9ca3af",borderRadius:"2px",margin:"12px auto 0",cursor:"grab"}}/>
 
         {/* ── PROFILE HEADER ── */}
         <div style={{
