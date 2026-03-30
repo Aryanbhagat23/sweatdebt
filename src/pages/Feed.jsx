@@ -50,17 +50,17 @@ export default function Feed({ user, onBellClick }) {
   }
 
   if (loading) return (
-    <div style={{ height:"100vh", background:"#000", display:"flex", alignItems:"center", justifyContent:"center" }}>
+    <div style={{ height:"100dvh", background:"#000", display:"flex", alignItems:"center", justifyContent:"center" }}>
       <style>{`@keyframes _sp{to{transform:rotate(360deg)}}`}</style>
       <div style={{ width:"32px", height:"32px", borderRadius:"50%", border:"3px solid #333", borderTop:`3px solid ${T.accent}`, animation:"_sp 0.8s linear infinite" }}/>
     </div>
   );
 
   return (
-    <div style={{ position:"relative", height:"100vh", background:"#000" }}>
+    <div style={{ position:"relative", height:"100dvh", background:"#000" }}>
       {/* STICKY HEADER */}
       <div style={{
-        position:"absolute", top:0, left:0, right:0, zIndex:200,
+        position:"fixed", top:0, left:0, right:0, zIndex:200,
         background:"linear-gradient(to bottom, rgba(5,46,22,0.92) 0%, rgba(5,46,22,0.5) 70%, transparent 100%)",
         paddingTop:"env(safe-area-inset-top, 0px)",
       }}>
@@ -98,7 +98,7 @@ export default function Feed({ user, onBellClick }) {
 
       {/* SCROLL SNAP CONTAINER */}
       <div style={{
-        height:"100vh",
+        height:"100dvh",
         overflowY:"scroll",
         scrollSnapType:"y mandatory",
         WebkitOverflowScrolling:"touch",
@@ -108,7 +108,7 @@ export default function Feed({ user, onBellClick }) {
         <style>{`::-webkit-scrollbar{display:none}`}</style>
 
         {filtered.length === 0 ? (
-          <div style={{ height:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"12px", scrollSnapAlign:"start" }}>
+          <div style={{ height:"100dvh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"12px", scrollSnapAlign:"start" }}>
             <div style={{ fontSize:"48px" }}>🎥</div>
             <div style={{ fontFamily:T.fontDisplay, fontSize:"24px", color:"#fff", letterSpacing:"0.04em", fontStyle:"italic" }}>
               {activeTab === "friends" ? "No friend forfeits yet" : "No forfeits yet"}
@@ -360,9 +360,13 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
     <div
       ref={pageRef}
       style={{
-        position:"relative", height:"100vh", width:"100%",
-        scrollSnapAlign:"start", scrollSnapStop:"always",
-        overflow:"hidden", background:"#000",
+        position:"relative",
+        height:"100dvh",
+        width:"100%",
+        scrollSnapAlign:"start",
+        scrollSnapStop:"always",
+        overflow:"hidden",
+        background:"#000",
         display:"flex", alignItems:"center", justifyContent:"center",
       }}
     >
@@ -371,7 +375,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
         ref={vidRef}
         src={video.videoUrl}
         onClick={togglePlay}
-        style={{ width:"100%", height:"100%", objectFit:"contain", display:"block", cursor:"pointer" }}
+        style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", cursor:"pointer", position:"absolute", inset:0 }}
         loop playsInline
       />
 
@@ -586,7 +590,7 @@ function SideBtn({ icon, count, label, onClick }) {
         backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)",
         border:"1px solid rgba(255,255,255,0.18)",
         display:"flex", alignItems:"center", justifyContent:"center",
-        fontSize:"16px",color:"aqua"
+        fontSize:"16px", color:"aqua"
       }}>
         {icon}
       </div>
