@@ -16,6 +16,23 @@ const C = {
 const CLOUD  = "daf3vs5n6";
 const PRESET = "jrmodcfe";
 
+/* ── send a notification doc ── */
+async function sendNotif({ toUid, fromUid, fromName, type, betId, text }) {
+  if (!toUid || toUid === fromUid) return; // don't notify yourself
+  try {
+    await addDoc(collection(db, "notifications"), {
+      toUserId:  toUid,
+      fromUserId: fromUid,
+      fromName,
+      type,       // "proof_uploaded" | "bet_accepted" | "proof_approved" etc.
+      betId:     betId || null,
+      message:   text,
+      read:      false,
+      createdAt: serverTimestamp(),
+    });
+  } catch(e) { console.warn("Notification failed (non-critical):", e); }
+}
+
 export default function UploadProof({ user }) {
   const navigate = useNavigate();
   const { betId }         = useParams();
@@ -44,7 +61,7 @@ export default function UploadProof({ user }) {
     const f = e.target.files?.[0];
     if (!f) return;
     if (!f.type.startsWith("video/")) { setError("Please select a video file."); return; }
-    if (f.size > 100 * 1024 * 1024) { setError("Video must be under 100 MB."); return; }
+    if (f.size > 100 * 1024 * 1024)  { setError("Video must be under 100 MB."); return; }
     setFile(f);
     setPreview(URL.createObjectURL(f));
     setError("");
@@ -60,47 +77,74 @@ export default function UploadProof({ user }) {
     try {
       /* ── 1. Upload to Cloudinary ── */
       const form = new FormData();
-      form.append("file",           file);
-      form.append("upload_preset",  PRESET);
-      form.append("resource_type",  "video");
+      form.append("file",          file);
+      form.append("upload_preset", PRESET);
+      form.append("resource_type", "video");
 
       setProgress(30);
-      const res  = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/video/upload`, {
-        method: "POST", body: form,
-      });
+      const res  = await fetch(
+        `https://api.cloudinary.com/v1_1/${CLOUD}/video/upload`,
+        { method:"POST", body:form }
+      );
       const data = await res.json();
       if (!data.secure_url) throw new Error("Cloudinary upload failed");
       setProgress(70);
 
-      /* ── 2. Save to Firestore videos collection ── */
+      /* ── 2. Gather all bet fields needed for Feed canVerdict check ── */
       const betData = bet || {};
-      await addDoc(collection(db, "videos"), {
-        videoUrl:       data.secure_url,
-        uploadedBy:     user.uid,
-        uploadedByName: user.displayName || "",
-        uploaderPhoto:  user.photoURL    || null,
-        betId:          paramBetId,
-        description:    description.trim(),
 
-        /* for canVerdict checks in Feed */
+      // Figure out who the opponent is — the person who did NOT upload
+      // They are identified by opponentUid OR createdBy (if uploader is the opponent)
+      const uploaderIsCreator = betData.createdBy === user.uid;
+      const opponentUid = uploaderIsCreator
+        ? (betData.opponentUid || null)          // uploader created the bet → opponent is opponentUid
+        : (betData.createdBy   || null);          // uploader is the opponent → creator needs to approve
+
+      /* ── 3. Save to Firestore videos collection ── */
+      await addDoc(collection(db, "videos"), {
+        videoUrl:        data.secure_url,
+        uploadedBy:      user.uid,
+        uploadedByName:  user.displayName || "",
+        uploaderPhoto:   user.photoURL    || null,
+        betId:           paramBetId,
+        description:     description.trim(),
+
+        // ✅ ALL fields needed for Feed approve/dispute logic
+        opponentUid:     opponentUid,                        // ← KEY FIX: was missing
         betCreatedBy:    betData.createdBy    || null,
         opponentEmail:   betData.opponentEmail|| null,
-        createdByEmail:  betData.createdByEmail||null,
+        createdByEmail:  betData.createdByEmail|| user.email || null,
 
-        createdAt:  serverTimestamp(),
-        likes:      0,
-        comments:   0,
-        approved:   false,
-        disputed:   false,
-        jurors:     [],
-        juryStatus: null,
+        createdAt:    serverTimestamp(),
+        likes:        0,
+        comments:     0,
+        approved:     false,
+        disputed:     false,
+        jurors:       [],
+        juryStatus:   null,
         juryDeadline: null,
       });
-      setProgress(90);
+      setProgress(85);
 
-      /* ── 3. If tied to a real bet, mark it as "proof_uploaded" ── */
+      /* ── 4. Mark bet as proof_uploaded ── */
       if (paramBetId && paramBetId !== "general" && bet) {
-        await updateDoc(doc(db, "bets", paramBetId), { proofUploaded: true });
+        await updateDoc(doc(db, "bets", paramBetId), {
+          proofUploaded: true,
+          proofUploadedAt: serverTimestamp(),
+        });
+      }
+      setProgress(95);
+
+      /* ── 5. Notify the opponent so they know to go approve ── */
+      if (opponentUid) {
+        await sendNotif({
+          toUid:    opponentUid,
+          fromUid:  user.uid,
+          fromName: user.displayName || "Someone",
+          type:     "proof_uploaded",
+          betId:    paramBetId,
+          text:     `${user.displayName || "Your opponent"} uploaded forfeit proof — go approve or dispute it!`,
+        });
       }
 
       setProgress(100);
@@ -114,7 +158,6 @@ export default function UploadProof({ user }) {
     setUploading(false);
   };
 
-  /* ── UI ── */
   return (
     <div style={{ minHeight:"100vh", background:C.page, paddingBottom:"60px" }}>
       <style>{`@keyframes _sp{to{transform:rotate(360deg)}}`}</style>
@@ -122,7 +165,7 @@ export default function UploadProof({ user }) {
       {/* Header */}
       <div style={{ background:C.chalkboard, padding:"52px 16px 20px" }}>
         <div style={{ display:"flex", alignItems:"center", gap:"12px" }}>
-          <button type="button" onClick={()=>navigate(-1)}
+          <button type="button" onClick={() => navigate(-1)}
             style={{ width:"40px", height:"40px", borderRadius:"50%", background:"rgba(110,231,183,0.15)", border:"1px solid rgba(110,231,183,0.3)", color:"#fff", fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
             ←
           </button>
@@ -142,7 +185,8 @@ export default function UploadProof({ user }) {
           <div style={{ background:`${C.accent}15`, border:`1px solid ${C.accent}40`, borderRadius:"16px", padding:"24px", textAlign:"center" }}>
             <div style={{ fontSize:"48px", marginBottom:"8px" }}>🎉</div>
             <div style={{ fontSize:"18px", fontWeight:"700", color:C.heading }}>Video uploaded!</div>
-            <div style={{ fontSize:"13px", color:C.muted, marginTop:"4px" }}>Heading to the feed…</div>
+            <div style={{ fontSize:"13px", color:C.muted, marginTop:"4px" }}>Your opponent has been notified 🔔</div>
+            <div style={{ fontSize:"12px", color:C.muted, marginTop:"4px" }}>Heading to the feed…</div>
           </div>
         )}
 
@@ -171,12 +215,12 @@ export default function UploadProof({ user }) {
             {/* Description */}
             <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"16px" }}>
               <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.muted, letterSpacing:"0.1em", marginBottom:"10px" }}>
-                CAPTION / DESCRIPTION <span style={{ color:C.muted, fontWeight:"400" }}>(optional)</span>
+                CAPTION <span style={{ fontWeight:"400" }}>(optional)</span>
               </div>
               <textarea
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                placeholder='e.g. "100 burpees in the rain, as promised 💀" or just leave it blank'
+                placeholder='e.g. "100 burpees in the rain, as promised 💀"'
                 maxLength={200}
                 rows={3}
                 style={{ width:"100%", background:C.page, border:`1px solid ${C.border}`, borderRadius:"10px", padding:"12px 14px", color:C.heading, fontSize:"14px", fontFamily:"system-ui", outline:"none", resize:"none", lineHeight:"1.5", boxSizing:"border-box" }}
@@ -205,13 +249,18 @@ export default function UploadProof({ user }) {
               </div>
             )}
 
-            {/* Bet info */}
+            {/* Bet info card */}
             {bet && (
               <div style={{ background:C.chalkboard, borderRadius:"14px", padding:"14px 16px", display:"flex", gap:"12px", alignItems:"center" }}>
                 <div style={{ fontSize:"28px" }}>⚔️</div>
                 <div>
                   <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.accentSoft, letterSpacing:"0.1em", marginBottom:"2px" }}>UPLOADING FOR BET</div>
-                  <div style={{ fontSize:"14px", fontWeight:"600", color:"#fff" }}>{bet.description || `${bet.reps || ""} ${bet.forfeit || "Forfeit"}`}</div>
+                  <div style={{ fontSize:"14px", fontWeight:"600", color:"#fff" }}>
+                    {bet.description || `${bet.reps || ""} ${bet.forfeit || "Forfeit"}`}
+                  </div>
+                  <div style={{ fontSize:"12px", color:"rgba(255,255,255,0.5)", marginTop:"3px" }}>
+                    vs {bet.opponentName || bet.opponentEmail || "opponent"}
+                  </div>
                 </div>
               </div>
             )}
@@ -222,19 +271,19 @@ export default function UploadProof({ user }) {
               disabled={!file || uploading}
               style={{
                 width:"100%", padding:"18px",
-                background: (!file || uploading) ? C.page : C.chalkboard,
+                background:(!file || uploading) ? C.page : C.chalkboard,
                 border:`1px solid ${(!file || uploading) ? C.border : "transparent"}`,
                 borderRadius:"16px",
                 fontFamily:"monospace", fontSize:"18px", letterSpacing:"0.06em", fontWeight:"700",
-                color: (!file || uploading) ? C.muted : C.accentSoft,
-                cursor: (!file || uploading) ? "not-allowed" : "pointer",
+                color:(!file || uploading) ? C.muted : C.accentSoft,
+                cursor:(!file || uploading) ? "not-allowed" : "pointer",
                 transition:"all 0.2s",
               }}>
               {uploading ? "⏳ UPLOADING..." : "💀 POST FORFEIT"}
             </button>
 
             <div style={{ textAlign:"center", fontSize:"11px", color:C.muted, fontFamily:"monospace" }}>
-              Max 100 MB · Your opponent will need to approve or dispute
+              Max 100 MB · Your opponent will be notified to approve 🔔
             </div>
           </>
         )}

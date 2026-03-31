@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { db } from "../firebase";
 import {
   collection, query, where, onSnapshot,
-  doc, updateDoc, serverTimestamp, deleteDoc, getDocs,
+  doc, updateDoc, serverTimestamp, deleteDoc, getDocs, addDoc,
 } from "firebase/firestore";
 import T from "../theme";
 import DailyChallenge from "../components/DailyChallenge";
@@ -11,6 +11,23 @@ import LiveSportsFeed from "../components/LiveSportsFeed";
 import NotificationBell from "../components/NotificationBell";
 import NotificationCenter from "../components/NotificationCenter";
 import { getPendingDebts, checkAndApplyPenalties } from "../utils/penaltySystem";
+
+/* ── Send notification helper ────────────────────────────────── */
+async function sendNotif({ toUid, fromUid, fromName, type, betId, text }) {
+  if (!toUid || toUid === fromUid) return;
+  try {
+    await addDoc(collection(db, "notifications"), {
+      toUserId:   toUid,
+      fromUserId: fromUid,
+      fromName,
+      type,
+      betId:      betId || null,
+      message:    text,
+      read:       false,
+      createdAt:  serverTimestamp(),
+    });
+  } catch(e) { console.warn("Notif failed:", e); }
+}
 
 /* ── Countdown hook + pill ─────────────────────────────────── */
 function useCountdown(ts) {
@@ -44,7 +61,7 @@ function useCountdown(ts) {
 function CountdownPill({ ts }) {
   const cd = useCountdown(ts);
   if (!cd) return null;
-  const color  = cd.expired||cd.urgent ? T.red      : cd.warning ? T.yellow      : T.green;
+  const color  = cd.expired||cd.urgent ? T.red       : cd.warning ? T.yellow      : T.green;
   const bg     = cd.expired||cd.urgent ? T.redLight  : cd.warning ? T.yellowLight  : T.greenLight;
   const border = cd.expired||cd.urgent ? T.redBorder : cd.warning ? T.yellowBorder : T.greenBorder;
   return (
@@ -109,19 +126,19 @@ export default function Bets({ user }) {
   const [debts,      setDebts]     = useState([]);
   const [debtOpen,   setDebtOpen]  = useState(false);
 
-  /* prune old notifs */
   useEffect(() => { if (user) pruneNotifs(user.uid); }, [user]);
 
-  /* penalty check + load debts */
   useEffect(() => {
     if (!user) return;
     checkAndApplyPenalties(user.uid);
     getPendingDebts(user.uid).then(setDebts).catch(()=>{});
   }, [user]);
 
-  /* load challenges (incoming) */
+  /* load challenges (incoming — where opponentEmail matches OR opponentUid matches) */
   useEffect(() => {
     if (!user) return;
+
+    // Listen by email
     const u1 = onSnapshot(
       query(collection(db,"bets"), where("opponentEmail","==",user.email)),
       snap => {
@@ -132,7 +149,8 @@ export default function Bets({ user }) {
       },
       () => setLoading(false)
     );
-    /* load my bets */
+
+    // Load my bets
     const u2 = onSnapshot(
       query(collection(db,"bets"), where("createdBy","==",user.uid)),
       snap => {
@@ -142,15 +160,14 @@ export default function Bets({ user }) {
       },
       () => {}
     );
+
     return () => { u1(); u2(); };
   }, [user]);
 
-  /* derived stats */
   const allBets  = [...myBets, ...challenges];
-  const totalLost = allBets.filter(b => b.status === "lost");
   const stats = {
-    won:    allBets.filter(b => b.status === "won").length,
-    lost:   totalLost.length,
+    won:    allBets.filter(b => b.status === "won"  || b.status === "approved").length,
+    lost:   allBets.filter(b => b.status === "lost" || b.status === "disputed").length,
     active: allBets.filter(b => ["pending","accepted"].includes(b.status)).length,
   };
   const pending = challenges.filter(b => b.status === "pending");
@@ -168,7 +185,6 @@ export default function Bets({ user }) {
       {/* ── HEADER ── */}
       <div style={{ background:T.bg0, padding:"52px 16px 16px" }}>
 
-        {/* greeting + bell */}
         <div style={{ display:"flex", alignItems:"flex-start", justifyContent:"space-between", marginBottom:"4px" }}>
           <div>
             <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:T.textMuted }}>{greeting()}</div>
@@ -179,21 +195,20 @@ export default function Bets({ user }) {
           <NotificationBell user={user} onClick={() => setNotifOpen(true)} />
         </div>
 
-        {/* ── 4-TILE STAT BAR (replaces the confusing SWEAT DEBT number) ── */}
-        <div style={{ display:"flex", background:T.bg1, border:`1px solid ${T.borderCard}`, borderRadius:"14px", overflow:"hidden", marginTop:"14px", marginBottom: debts.length > 0 ? "8px" : "0" }}>
+        {/* 4-TILE STAT BAR */}
+        <div style={{ display:"flex", background:T.bg1, border:`1px solid ${T.borderCard}`, borderRadius:"14px", overflow:"hidden", marginTop:"14px", marginBottom:debts.length>0?"8px":"0" }}>
           {[
-            { label:"WON",  val:stats.won,    color:T.accent   },
+            { label:"WON",  val:stats.won,    color:T.accent },
             { label:"LOST", val:stats.lost,   color:T.yellow||"#f5a623" },
-            { label:"LIVE", val:stats.active, color:T.panel    },
+            { label:"LIVE", val:stats.active, color:T.panel },
           ].map((s, i) => (
             <div key={s.label} style={{ flex:1, padding:"12px 0", textAlign:"center", borderRight:`1px solid ${T.borderCard}` }}>
               <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", fontWeight:"700", color:s.color, fontStyle:"italic" }}>{s.val}</div>
               <div style={{ fontFamily:T.fontMono, fontSize:"9px", color:T.textMuted, letterSpacing:"0.08em", marginTop:"2px" }}>{s.label}</div>
             </div>
           ))}
-          {/* DEBTS tile — red, tappable */}
           <div
-            onClick={() => debts.length > 0 && setDebtOpen(o => !o)}
+            onClick={() => debts.length>0 && setDebtOpen(o=>!o)}
             style={{ flex:1, padding:"12px 0", textAlign:"center", background:debts.length>0?"#fef2f2":T.bg0, borderLeft:`2px solid ${debts.length>0?"#ef4444":T.borderCard}`, cursor:debts.length>0?"pointer":"default" }}>
             <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", fontWeight:"700", color:debts.length>0?"#ef4444":T.textMuted, fontStyle:"italic" }}>{debts.length}</div>
             <div style={{ fontFamily:T.fontMono, fontSize:"9px", color:debts.length>0?"#ef4444":T.textMuted, letterSpacing:"0.08em", marginTop:"2px" }}>
@@ -202,8 +217,8 @@ export default function Bets({ user }) {
           </div>
         </div>
 
-        {/* ── EXPANDABLE DEBT PANEL ── */}
-        {debtOpen && debts.length > 0 && (
+        {/* DEBT PANEL */}
+        {debtOpen && debts.length>0 && (
           <div style={{ background:T.bg1, border:"1.5px solid #ef4444", borderRadius:"12px", overflow:"hidden", marginBottom:"10px", animation:"slideDown 0.2s ease" }}>
             <div style={{ padding:"8px 14px", background:"#fef2f2", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <span style={{ fontSize:"10px", color:"#ef4444", fontFamily:T.fontMono, letterSpacing:"0.1em", fontWeight:"700" }}>
@@ -212,13 +227,10 @@ export default function Bets({ user }) {
               <span style={{ fontSize:"10px", color:"#ef4444", fontFamily:T.fontMono }}>24h window</span>
             </div>
             {debts.map((debt, i) => (
-              <div key={debt.id}
-                style={{ padding:"12px 14px", borderBottom:i<debts.length-1?"1px solid #fde8e8":"none", display:"flex", alignItems:"center", gap:"10px" }}>
+              <div key={debt.id} style={{ padding:"12px 14px", borderBottom:i<debts.length-1?"1px solid #fde8e8":"none", display:"flex", alignItems:"center", gap:"10px" }}>
                 <div style={{ width:"8px", height:"8px", borderRadius:"50%", background:debt.expired?"#ef4444":debt.urgent?"#f5a623":T.accent, flexShrink:0 }}/>
                 <div style={{ flex:1 }}>
-                  <div style={{ fontSize:"13px", fontWeight:"600", color:T.panel, fontFamily:T.fontBody }}>
-                    {debt.reps} {debt.forfeit}
-                  </div>
+                  <div style={{ fontSize:"13px", fontWeight:"600", color:T.panel, fontFamily:T.fontBody }}>{debt.reps} {debt.forfeit}</div>
                   <div style={{ fontSize:"11px", color:debt.expired?"#ef4444":debt.urgent?"#f5a623":T.textMuted, fontFamily:T.fontMono, marginTop:"2px" }}>
                     vs {debt.opponentName||debt.opponentEmail||"opponent"} · {debt.timeLabel}
                   </div>
@@ -231,14 +243,12 @@ export default function Bets({ user }) {
             ))}
             <div style={{ padding:"8px 14px", background:"#fef9c3", display:"flex", alignItems:"center", gap:"8px" }}>
               <span style={{ fontSize:"12px" }}>⚠️</span>
-              <span style={{ fontSize:"11px", color:"#92400e", fontFamily:T.fontMono }}>
-                Miss the window → -15 honour + "Debt Dodger" badge
-              </span>
+              <span style={{ fontSize:"11px", color:"#92400e", fontFamily:T.fontMono }}>Miss the window → -15 honour + "Debt Dodger" badge</span>
             </div>
           </div>
         )}
 
-        {/* ── Chalkboard stat bars ── */}
+        {/* Chalkboard bars */}
         <div style={{ background:T.bg1, borderRadius:T.r16, padding:"16px", marginTop:"12px", border:`1px solid ${T.borderCard}`, boxShadow:T.shadowCard }}>
           <div style={{ display:"inline-flex", alignItems:"center", gap:"6px", background:T.accentLight, border:`1.5px solid ${T.accent}`, borderRadius:T.rFull, padding:"3px 10px", fontFamily:T.fontMono, fontSize:"9px", fontWeight:"800", color:T.accentDark, letterSpacing:"0.08em", marginBottom:"12px" }}>
             ✦ CHALKBOARD
@@ -258,7 +268,7 @@ export default function Bets({ user }) {
           ))}
         </div>
 
-        {/* ── Action buttons ── */}
+        {/* Action buttons */}
         <div style={{ display:"flex", gap:"10px", marginTop:"12px" }}>
           <button type="button" onClick={() => navigate("/create")}
             style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:"8px", background:T.panel, border:"none", borderRadius:T.rFull, padding:"12px 16px", fontFamily:T.fontDisplay, fontSize:"18px", letterSpacing:"0.05em", color:T.accent, cursor:"pointer", boxShadow:T.shadowMd }}>
@@ -266,19 +276,16 @@ export default function Bets({ user }) {
           </button>
           <button type="button" onClick={() => navigate("/group-bets")}
             style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:"6px", padding:"12px 16px", background:T.bg1, border:`1px solid ${T.borderCard}`, borderRadius:T.rFull, fontFamily:T.fontDisplay, fontSize:"18px", letterSpacing:"0.04em", color:T.panel, cursor:"pointer" }}>
-            👥 GROUP BETS
+            👥 GROUP
           </button>
           <button type="button" onClick={() => navigate("/friends")}
-            style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:"8px", background:T.bg1, border:`1.5px solid ${T.borderMid}`, borderRadius:T.rFull, padding:"12px 16px", fontFamily:T.fontDisplay, fontSize:"18px", letterSpacing:"0.05em", color:T.panel, cursor:"pointer", boxShadow:T.shadowSm }}>
+            style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:"8px", background:T.bg1, border:`1.5px solid ${T.borderMid}`, borderRadius:T.rFull, padding:"12px 16px", fontFamily:T.fontDisplay, fontSize:"18px", letterSpacing:"0.05em", color:T.panel, cursor:"pointer" }}>
             👥 FRIENDS
           </button>
         </div>
       </div>
 
-      {/* Notification center */}
       <NotificationCenter user={user} isOpen={notifOpen} onClose={() => setNotifOpen(false)} />
-
-      {/* Daily challenge */}
       <DailyChallenge user={user} />
 
       {/* Live sports toggle */}
@@ -296,7 +303,7 @@ export default function Bets({ user }) {
       <div style={{ height:"1px", background:T.border, margin:"8px 16px 16px" }}/>
 
       {/* Pending challenges banner */}
-      {pending.length > 0 && (
+      {pending.length>0 && (
         <div style={{ margin:"0 16px 12px", background:T.accentLight, border:`1.5px solid ${T.accent}`, borderRadius:T.r16, padding:"14px 16px", display:"flex", alignItems:"center", gap:"10px", cursor:"pointer" }}
           onClick={() => setTab("challenges")}>
           <span style={{ fontSize:"20px" }}>⚔️</span>
@@ -307,7 +314,6 @@ export default function Bets({ user }) {
         </div>
       )}
 
-      {/* Active bets label */}
       <div style={{ padding:"0 16px 10px" }}>
         <div style={{ fontFamily:T.fontMono, fontSize:"11px", fontWeight:"700", color:T.textMuted, letterSpacing:"0.12em", textTransform:"uppercase" }}>Active Bets</div>
       </div>
@@ -331,7 +337,7 @@ export default function Bets({ user }) {
         ? <div style={{ display:"flex", justifyContent:"center", padding:"32px" }}>
             <div style={{ width:"32px", height:"32px", borderRadius:"50%", border:`3px solid ${T.border}`, borderTop:`3px solid ${T.accent}`, animation:"spin 0.8s linear infinite" }}/>
           </div>
-        : list.length === 0
+        : list.length===0
           ? <div style={{ textAlign:"center", padding:"32px 20px" }}>
               <div style={{ fontSize:"40px", marginBottom:"10px" }}>⚔️</div>
               <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:T.textMuted, letterSpacing:"0.04em", fontStyle:"italic" }}>
@@ -347,8 +353,8 @@ export default function Bets({ user }) {
                   key={b.id}
                   bet={b}
                   user={user}
-                  expanded={expanded === b.id}
-                  onToggle={() => setExpanded(expanded===b.id ? null : b.id)}
+                  expanded={expanded===b.id}
+                  onToggle={() => setExpanded(expanded===b.id?null:b.id)}
                   navigate={navigate}
                   isChallenge={tab==="challenges"}
                 />
@@ -359,15 +365,56 @@ export default function Bets({ user }) {
   );
 }
 
-/* ─────────────────────────────────────────
-   BET CARD — unchanged from your original
-───────────────────────────────────────── */
+/* ── BET CARD ── */
 function BetCard({ bet, user, expanded, onToggle, navigate, isChallenge }) {
+  const [actioning, setActioning] = useState(false);
   const st       = T.status[bet.status] || T.status.pending;
-  const isLost   = bet.status === "lost";
+  const isLost   = bet.status==="lost";
   const isActive = ["pending","accepted"].includes(bet.status);
   const sport    = bet.sport || "custom";
   const emoji    = SPORT_EMOJI[sport] || "🎯";
+
+  const handleAccept = async () => {
+    setActioning(true);
+    try {
+      const dl = new Date(Date.now() + 48*3600000);
+      await updateDoc(doc(db,"bets",bet.id), {
+        status:      "accepted",
+        deadline:    dl,
+        acceptedAt:  serverTimestamp(),
+        // ✅ make sure opponentUid is set so Feed can identify the opponent
+        opponentUid: user.uid,
+        participants: [bet.createdBy, user.uid],
+      });
+      // ✅ notify the challenger that their bet was accepted
+      await sendNotif({
+        toUid:    bet.createdBy,
+        fromUid:  user.uid,
+        fromName: user.displayName || "Your opponent",
+        type:     "bet_accepted",
+        betId:    bet.id,
+        text:     `${user.displayName || "Your opponent"} accepted your challenge! The bet is live 🔥`,
+      });
+    } catch(e) { console.error(e); }
+    setActioning(false);
+  };
+
+  const handleDecline = async () => {
+    setActioning(true);
+    try {
+      await updateDoc(doc(db,"bets",bet.id), { status:"declined" });
+      // notify challenger
+      await sendNotif({
+        toUid:    bet.createdBy,
+        fromUid:  user.uid,
+        fromName: user.displayName || "Your opponent",
+        type:     "bet_declined",
+        betId:    bet.id,
+        text:     `${user.displayName || "Your opponent"} declined your challenge.`,
+      });
+    } catch(e) { console.error(e); }
+    setActioning(false);
+  };
 
   return (
     <div style={{ background:T.bg1, border:`1px solid ${isLost?T.redBorder:T.borderCard}`, borderRadius:T.r20, marginBottom:"10px", overflow:"hidden", boxShadow:T.shadowCard }}>
@@ -390,7 +437,6 @@ function BetCard({ bet, user, expanded, onToggle, navigate, isChallenge }) {
           {bet.description || `${isChallenge ? bet.createdByName : bet.opponentName||bet.opponentEmail} · Loser does ${bet.reps||"?"} ${bet.forfeit||"exercise"}`}
         </div>
 
-        {/* Players + forfeit pill */}
         <div style={{ display:"flex", alignItems:"center", gap:"8px" }}>
           <div style={{ width:"30px", height:"30px", borderRadius:"50%", background:T.panel, display:"flex", alignItems:"center", justifyContent:"center", fontFamily:T.fontDisplay, fontSize:"13px", color:T.accent, flexShrink:0 }}>
             {(isChallenge ? bet.createdByName : user?.displayName)?.charAt(0)?.toUpperCase() || "A"}
@@ -410,7 +456,6 @@ function BetCard({ bet, user, expanded, onToggle, navigate, isChallenge }) {
           }
         </div>
 
-        {/* Lost debt bar */}
         {isLost && (
           <div style={{ background:T.redLight, border:`1px solid ${T.redBorder}`, borderRadius:T.r12, padding:"10px 14px", marginTop:"8px" }}>
             <div style={{ fontFamily:T.fontDisplay, fontSize:"14px", color:T.red, letterSpacing:"0.04em" }}>
@@ -433,19 +478,18 @@ function BetCard({ bet, user, expanded, onToggle, navigate, isChallenge }) {
             )}
             {bet.status==="pending" && isChallenge && (
               <button type="button"
-                style={{ flex:1, background:T.accent, border:"none", borderRadius:T.r16, padding:"14px", fontFamily:T.fontDisplay, fontSize:"18px", letterSpacing:"0.05em", color:"#fff", cursor:"pointer", boxShadow:"0 4px 14px rgba(16,185,129,0.35)" }}
-                onClick={async () => {
-                  const dl = new Date(Date.now() + 48*3600000);
-                  await updateDoc(doc(db,"bets",bet.id), { status:"accepted", deadline:dl, acceptedAt:serverTimestamp() });
-                }}>
-                ✓ ACCEPT
+                disabled={actioning}
+                style={{ flex:1, background:actioning?"#e5e7eb":T.accent, border:"none", borderRadius:T.r16, padding:"14px", fontFamily:T.fontDisplay, fontSize:"18px", letterSpacing:"0.05em", color:"#fff", cursor:actioning?"not-allowed":"pointer", boxShadow:"0 4px 14px rgba(16,185,129,0.35)", opacity:actioning?0.7:1 }}
+                onClick={handleAccept}>
+                {actioning ? "..." : "✓ ACCEPT"}
               </button>
             )}
             {bet.status==="pending" && isChallenge && (
               <button type="button"
-                style={{ flex:1, background:"transparent", border:`1.5px solid ${T.borderMid}`, borderRadius:T.r16, padding:"14px", fontFamily:T.fontDisplay, fontSize:"18px", letterSpacing:"0.05em", color:T.textMuted, cursor:"pointer" }}
-                onClick={async () => await updateDoc(doc(db,"bets",bet.id), { status:"declined" })}>
-                ✗ DECLINE
+                disabled={actioning}
+                style={{ flex:1, background:"transparent", border:`1.5px solid ${T.borderMid}`, borderRadius:T.r16, padding:"14px", fontFamily:T.fontDisplay, fontSize:"18px", letterSpacing:"0.05em", color:T.textMuted, cursor:actioning?"not-allowed":"pointer", opacity:actioning?0.7:1 }}
+                onClick={handleDecline}>
+                {actioning ? "..." : "✗ DECLINE"}
               </button>
             )}
             {bet.status==="accepted" && !isChallenge && (
