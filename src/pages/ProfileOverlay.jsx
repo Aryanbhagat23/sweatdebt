@@ -150,7 +150,7 @@ export default function ProfileOverlay({ user }){
 
   // ── load profile ─────────────────────────────────────────────────────────────
   useEffect(()=>{
-    if(!user||!isOpen) return;
+    if(!user) return;
     const unsub = onSnapshot(doc(db,"users",user.uid), snap=>{
       if(snap.exists()){
         const d = snap.data();
@@ -167,11 +167,11 @@ export default function ProfileOverlay({ user }){
       }
     });
     return ()=>unsub();
-  },[user, isOpen]);
+  },[user]);
 
   // ── load bets for stats ───────────────────────────────────────────────────────
   useEffect(()=>{
-    if(!user||!isOpen) return;
+    if(!user) return;
     const q = query(collection(db,"bets"),
       where("participants","array-contains",user.uid));
     getDocs(q).then(snap=>{
@@ -185,18 +185,18 @@ export default function ProfileOverlay({ user }){
       });
       setStats({ total:wins+losses, wins, losses });
     });
-  },[user, isOpen]);
+  },[user]);
 
   // ── load videos ───────────────────────────────────────────────────────────────
   useEffect(()=>{
-    if(!user||!isOpen) return;
+    if(!user) return;
     const q = query(collection(db,"videos"),where("userId","==",user.uid));
     const unsub = onSnapshot(q, snap=>{
       setVideos(snap.docs.map(d=>({id:d.id,...d.data()}))
         .sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)));
     });
     return ()=>unsub();
-  },[user, isOpen]);
+  },[user]);
 
   // ── derived ───────────────────────────────────────────────────────────────────
   // ⚠️ All hooks above — safe to return null now
