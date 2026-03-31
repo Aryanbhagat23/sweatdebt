@@ -25,6 +25,7 @@ import CreateGroupBet   from "./pages/CreateGroupBet";
 import GroupBetRoom     from "./pages/GroupBetRoom";
 import Seasons          from "./pages/Seasons";
 import ChangePassword   from "./pages/ChangePassword";
+import AdminDashboard   from "./pages/AdminDashboard";
 import JuryVote         from "./pages/Juryvote";
 
 // ── Logout page — signs out then redirects to auth ────────────────────────────
@@ -49,7 +50,7 @@ function NavBar({ user, livePhoto, unreadDMs, onProfileOpen }) {
 
   const hideNav = [
     "/create", "/upload", "/edit-profile", "/friends",
-    "/inbox/new", "/create-group-bet", "/change-password",
+    "/inbox/new", "/create-group-bet", "/change-password", "/admin",
   ];
   const hideNavPrefix = ["/profile/", "/group-bets/", "/inbox/"];
 
@@ -200,6 +201,7 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
         <Route path="/seasons"               element={<Seasons user={user}/>}/>
         <Route path="/jury/:videoId"         element={<JuryVote user={user}/>}/>
         <Route path="/change-password"       element={<ChangePassword user={user}/>}/>
+        <Route path="/admin"                 element={<AdminDashboard user={user}/>}/>
         <Route path="/logout"                element={<LogoutPage/>}/>
       </Routes>
 

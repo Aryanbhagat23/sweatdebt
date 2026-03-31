@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { db } from "../firebase";
 import {
   collection, onSnapshot, doc, updateDoc, deleteDoc,
-  increment, getDocs, getDoc,
+  increment, getDocs, getDoc, addDoc, serverTimestamp,
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import T from "../theme";
@@ -243,6 +243,21 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
       });
       if (video.betId && video.betId !== "general")
         await updateDoc(doc(db,"bets",video.betId), { status:"jury" });
+
+      // ✅ Notify every juror so they know to go vote
+      await Promise.all(jurorList.map(j =>
+        addDoc(collection(db, "notifications"), {
+          toUserId:   j.uid,
+          fromUserId: currentUser?.uid || null,
+          fromName:   currentUser?.displayName || "SweatDebt",
+          type:       "jury_selected",
+          videoId:    video.id,
+          betId:      video.betId || null,
+          message:    `⚖️ You've been selected as a juror! Watch the forfeit video and vote LEGIT or FAKE. You have 48 hours.`,
+          read:       false,
+          createdAt:  serverTimestamp(),
+        }).catch(() => {}) // non-critical
+      ));
 
       setDisputed(true);
       setJurors(jurorList);
@@ -590,7 +605,7 @@ function SideBtn({ icon, count, label, onClick }) {
         backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)",
         border:"1px solid rgba(255,255,255,0.18)",
         display:"flex", alignItems:"center", justifyContent:"center",
-        fontSize:"16px", color:"aqua"
+        fontSize:"16px",
       }}>
         {icon}
       </div>
