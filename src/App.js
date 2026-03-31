@@ -23,6 +23,7 @@ import NotificationCenter from "./components/NotificationCenter";
 import GroupBets        from "./pages/GroupBets";
 import CreateGroupBet   from "./pages/CreateGroupBet";
 import GroupBetRoom     from "./pages/GroupBetRoom";
+import Seasons          from "./pages/Seasons";
 import ChangePassword   from "./pages/ChangePassword";
 import JuryVote         from "./pages/Juryvote";
 
