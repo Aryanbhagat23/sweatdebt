@@ -27,6 +27,7 @@ import Seasons          from "./pages/Seasons";
 import ChangePassword   from "./pages/ChangePassword";
 import AdminDashboard   from "./pages/AdminDashboard";
 import SweatCard        from "./pages/Sweatcard";
+import PWAInstallPrompt from "./components/PWAInstallPrompt";
 import JuryVote         from "./pages/Juryvote";
 
 // ── Logout page — signs out then redirects to auth ────────────────────────────
@@ -205,6 +206,7 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
 
       <NavBar user={user} livePhoto={livePhoto} unreadDMs={unreadDMs}/>
       <NotificationCenter user={user} isOpen={notifOpen} onClose={() => setNotifOpen(false)}/>
+      <PWAInstallPrompt/>
     </>
   );
 }

@@ -95,29 +95,43 @@ export default function SweatCard({ user }) {
     card:    "#2C4A3E",
     border:  "rgba(16,185,129,0.2)",
     text:    "#ffffff",
-    muted:   "rgba(255,255,255,0.45)",
+    muted:   "rgba(255,255,255,0.55)",
     accent:  "#10b981",
     accentBg:"rgba(16,185,129,0.15)",
-    stat:    "rgba(255,255,255,0.07)",
+    stat:    "rgba(255,255,255,0.1)",
+    statText:"#ffffff",
     qr:      "#ffffff",
     qrBg:    "#1a2e1f",
     badge:   "rgba(16,185,129,0.2)",
-    won:     "#10b981",
-    lost:    "#ef4444",
+    won:     "#34d399",
+    lost:    "#fca5a5",
+    wonBox:  "rgba(52,211,153,0.15)",
+    lostBox: "rgba(252,165,165,0.15)",
+    wonBorder:"#34d399",
+    lostBorder:"#fca5a5",
+    wonText: "#34d399",
+    lostText:"#fca5a5",
   } : {
     bg:      "#f0fdf4",
     card:    "#ffffff",
     border:  "#d1fae5",
     text:    "#052e16",
-    muted:   "#6b7280",
-    accent:  "#10b981",
-    accentBg:"rgba(16,185,129,0.08)",
+    muted:   "#374151",
+    accent:  "#059669",
+    accentBg:"rgba(5,150,105,0.08)",
     stat:    "#f0fdf4",
+    statText:"#052e16",
     qr:      "#052e16",
     qrBg:    "#ffffff",
-    badge:   "rgba(16,185,129,0.1)",
-    won:     "#10b981",
-    lost:    "#ef4444",
+    badge:   "rgba(5,150,105,0.1)",
+    won:     "#065f46",
+    lost:    "#991b1b",
+    wonBox:  "rgba(6,95,70,0.1)",
+    lostBox: "rgba(153,27,27,0.08)",
+    wonBorder:"#059669",
+    lostBorder:"#dc2626",
+    wonText: "#065f46",
+    lostText:"#991b1b",
   };
 
   if (loading) return (
@@ -265,13 +279,14 @@ export default function SweatCard({ user }) {
           {/* Big stats row */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:"8px" }}>
             {[
-              { label:"WINS",    val:stats.wins,    color:T.won  },
-              { label:"LOSSES",  val:stats.losses,  color:T.lost },
+              { label:"WINS",    val:stats.wins,    color:T.won   },
+              { label:"LOSSES",  val:stats.losses,  color:T.lost  },
               { label:"WIN %",   val:`${winRate}%`, color:T.accent },
-              { label:"STREAK",  val:`🔥${stats.streak}`, color:"#f59e0b" },
+              { label:"STREAK",  val:`🔥${stats.streak}`, color:"#d97706" },
             ].map(s => (
               <div key={s.label} style={{
                 background:T.stat, borderRadius:"12px", padding:"10px 6px", textAlign:"center",
+                border:`1px solid ${T.border}`,
               }}>
                 <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"22px", color:s.color, lineHeight:1 }}>
                   {s.val}
@@ -321,10 +336,11 @@ export default function SweatCard({ user }) {
                 return (
                   <div key={i} style={{
                     width:"32px", height:"32px", borderRadius:"8px",
-                    background: won ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.12)",
-                    border:`1.5px solid ${won ? T.won : T.lost}`,
+                    background: won ? T.wonBox : T.lostBox,
+                    border:`1.5px solid ${won ? T.wonBorder : T.lostBorder}`,
                     display:"flex", alignItems:"center", justifyContent:"center",
-                    fontSize:"14px",
+                    fontFamily:"monospace", fontSize:"13px", fontWeight:"700",
+                    color: won ? T.wonText : T.lostText,
                   }}>
                     {won ? "W" : "L"}
                   </div>
@@ -349,7 +365,6 @@ export default function SweatCard({ user }) {
           </div>
         )}
 
-        {/* Quote */}
         <div style={{ padding:"16px 24px", borderBottom:`1px solid ${T.border}` }}>
           <div style={{ fontFamily:"system-ui", fontSize:"13px", color:T.muted, fontStyle:"italic", lineHeight:"1.5", textAlign:"center" }}>
             "{quote}"
