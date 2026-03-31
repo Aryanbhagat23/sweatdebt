@@ -97,7 +97,7 @@ export default function EditProfile({ user }) {
 
       {/* header */}
       <div style={{ display:"flex", alignItems:"center", gap:"12px", padding:"52px 16px 20px", borderBottom:`1px solid ${C.border}`, background:C.card }}>
-        <button type="button" onClick={()=>navigate(-1)}
+        <button type="button" onClick={() => navigate(-1)}
           style={{ width:"44px", height:"44px", borderRadius:"50%", background:C.page, border:`1px solid ${C.border}`, color:C.heading, fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
           ←
         </button>
