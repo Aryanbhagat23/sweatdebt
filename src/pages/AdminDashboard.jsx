@@ -8,7 +8,7 @@ import {
 } from "firebase/firestore";
 
 // ─── YOUR admin UIDs — add yours here ────────────────────────
-const ADMIN_UIDS = [vxGGUgBAAAQX7Qy2CZi8AMSxver2];
+const ADMIN_UIDS = ["vxGGUgBAAAQX7Qy2CZi8AMSxver2"];
 
 const C = {
   bg:       "#0f1117",
