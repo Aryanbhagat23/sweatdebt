@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sweatdebt-v2';
+const CACHE_NAME = 'sweatdebt-v3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -38,14 +38,22 @@ self.addEventListener('fetch', event => {
   event.respondWith(
     fetch(event.request)
       .then(response => {
-        // Cache successful responses
         if (response.ok) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
         }
         return response;
       })
-      .catch(() => caches.match(event.request))
+      .catch(() => {
+        return caches.match(event.request).then(cached => {
+          // Return cached version or a fallback response
+          return cached || new Response('Offline', {
+            status: 503,
+            statusText: 'Service Unavailable',
+            headers: { 'Content-Type': 'text/plain' },
+          });
+        });
+      })
   );
 });
 

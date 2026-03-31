@@ -416,7 +416,7 @@ export default function SweatCard({ user }) {
           <div style={{ fontFamily:"monospace", fontSize:"11px", color:"#10b981", letterSpacing:"0.08em", marginBottom:"8px" }}>
             📸 HOW TO SHARE
           </div>
-          <p style={{ fontFamily:"system-ui", fontSize:"13px", color:"rgba(255,255,255,0.5)", lineHeight:"1.6", margin:0 }}>
+          <p style={{ fontFamily:"system-ui", fontSize:"13px", color:"rgb(0, 46, 3)", lineHeight:"1.6", margin:0 }}>
             Take a screenshot of the card above.<br/>
             Share it to your Instagram story, WhatsApp status, or anywhere you want to flex your record.
           </p>
