@@ -55,12 +55,17 @@ export default function PWAInstallPrompt() {
 
   const handleInstall = async () => {
     if (deferredPrompt) {
+      // Android native install prompt available
       deferredPrompt.prompt();
       const { outcome } = await deferredPrompt.userChoice;
       if (outcome === 'accepted') setInstalled(true);
       setDeferredPrompt(null);
       setShow(false);
     } else if (isIOS) {
+      // iOS — show manual steps
+      setShowIOSSteps(true);
+    } else {
+      // Android but prompt not ready yet — show manual instructions
       setShowIOSSteps(true);
     }
   };
@@ -138,14 +143,21 @@ export default function PWAInstallPrompt() {
           Challenge friends to bets. Lose the bet — pay in sweat. Upload your forfeit video as proof. No money, just accountability.
         </div>
 
-        {/* iOS steps (shown after tapping Install on iOS) */}
+        {/* Manual install steps (iOS or Android fallback) */}
         {showIOSSteps && (
           <div style={{padding:"16px 24px",borderBottom:"1px solid #f3f4f6"}}>
-            {[
-              {num:"1", icon:"⬆️", text:'Tap the Share button at the bottom of Safari'},
-              {num:"2", icon:"➕", text:'"Add to Home Screen"'},
+            <div style={{fontFamily:"monospace",fontSize:"11px",color:"#9ca3af",letterSpacing:"0.08em",marginBottom:"12px"}}>
+              {isIOS ? "ON SAFARI (iOS)" : "ON CHROME (ANDROID)"}
+            </div>
+            {(isIOS ? [
+              {num:"1", icon:"⬆️", text:"Tap the Share button at the bottom"},
+              {num:"2", icon:"➕", text:'Tap "Add to Home Screen"'},
               {num:"3", icon:"✅", text:'Tap "Add" — done!'},
-            ].map(s=>(
+            ] : [
+              {num:"1", icon:"⋮",  text:"Tap the 3-dot menu in Chrome (top right)"},
+              {num:"2", icon:"➕", text:'Tap "Add to Home screen" or "Install app"'},
+              {num:"3", icon:"✅", text:'Tap "Install" — done!'},
+            ]).map(s=>(
               <div key={s.num} style={{display:"flex",alignItems:"center",gap:"12px",marginBottom:"12px"}}>
                 <div style={{
                   width:"28px",height:"28px",borderRadius:"50%",
