@@ -26,6 +26,7 @@ import GroupBetRoom     from "./pages/GroupBetRoom";
 import Seasons          from "./pages/Seasons";
 import ChangePassword   from "./pages/ChangePassword";
 import AdminDashboard   from "./pages/AdminDashboard";
+import SweatCard        from "./pages/Sweatcard";
 import JuryVote         from "./pages/Juryvote";
 
 // ── Logout page — signs out then redirects to auth ────────────────────────────
@@ -45,12 +46,12 @@ function LogoutPage() {
 }
 
 // ── Nav bar ───────────────────────────────────────────────────────────────────
-function NavBar({ user, livePhoto, unreadDMs, onProfileOpen }) {
+function NavBar({ user, livePhoto, unreadDMs }) {
   const location = useLocation();
 
   const hideNav = [
     "/create", "/upload", "/edit-profile", "/friends",
-    "/inbox/new", "/create-group-bet", "/change-password", "/admin",
+    "/inbox/new", "/create-group-bet", "/change-password", "/admin", "/sweat-card",
   ];
   const hideNavPrefix = ["/profile/", "/group-bets/", "/inbox/"];
 
@@ -104,14 +105,12 @@ function NavBar({ user, livePhoto, unreadDMs, onProfileOpen }) {
         </NavLink>
       ))}
 
-      {/* ME button */}
-      <div
-        style={{
-          display:"flex", flexDirection:"column", alignItems:"center", gap:"2px",
-          flex:1, padding:"2px 0", cursor:"pointer", color:T.textMuted,
-        }}
-        onClick={onProfileOpen}
-      >
+      {/* ME button — now a proper NavLink like all other tabs */}
+      <NavLink to="/me" style={({ isActive }) => ({
+        display:"flex", flexDirection:"column", alignItems:"center", gap:"2px",
+        flex:1, padding:"2px 0", cursor:"pointer", textDecoration:"none",
+        color: isActive ? T.accent : T.textMuted,
+      })}>
         <div style={{ fontSize:"20px", lineHeight:1 }}>
           {livePhoto
             ? <img src={livePhoto} alt="" style={{
@@ -130,19 +129,17 @@ function NavBar({ user, livePhoto, unreadDMs, onProfileOpen }) {
         <div style={{ fontFamily:T.fontMono, fontSize:"9px", fontWeight:"600", letterSpacing:"0.08em" }}>
           ME
         </div>
-      </div>
+      </NavLink>
     </nav>
   );
 }
 
 // ── App content (authenticated) ───────────────────────────────────────────────
 function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [notifOpen,   setNotifOpen]   = useState(false);
-  const [livePhoto,   setLivePhoto]   = useState(user?.photoURL || null);
-  const [unreadDMs,   setUnreadDMs]   = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [livePhoto, setLivePhoto] = useState(user?.photoURL || null);
+  const [unreadDMs, setUnreadDMs] = useState(0);
 
-  // live photo from Firestore
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(doc(db, "users", user.uid), snap => {
@@ -151,7 +148,6 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
     return () => unsub();
   }, [user]);
 
-  // unread DM count
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(
@@ -175,6 +171,7 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
         <Route path="/"                      element={<Bets user={user}/>}/>
         <Route path="/feed"                  element={<Feed user={user} onBellClick={()=>setNotifOpen(true)}/>}/>
         <Route path="/leaderboard"           element={<Leaderboard user={user}/>}/>
+        <Route path="/me"                    element={<ProfileOverlay user={user}/>}/>
 
         {/* bets */}
         <Route path="/create"                element={<CreateBet user={user}/>}/>
@@ -202,25 +199,12 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
         <Route path="/jury/:videoId"         element={<JuryVote user={user}/>}/>
         <Route path="/change-password"       element={<ChangePassword user={user}/>}/>
         <Route path="/admin"                 element={<AdminDashboard user={user}/>}/>
-        <Route path="/logout"                element={<LogoutPage/>}/>
+        <Route path="/sweat-card"            element={<SweatCard user={user}/>}/>
+        <Route path="/logout"               element={<LogoutPage/>}/>
       </Routes>
 
-      <NavBar
-        user={user}
-        livePhoto={livePhoto}
-        unreadDMs={unreadDMs}
-        onProfileOpen={() => setProfileOpen(true)}
-      />
-      <ProfileOverlay
-        user={user}
-        isOpen={profileOpen}
-        onClose={() => setProfileOpen(false)}
-      />
-      <NotificationCenter
-        user={user}
-        isOpen={notifOpen}
-        onClose={() => setNotifOpen(false)}
-      />
+      <NavBar user={user} livePhoto={livePhoto} unreadDMs={unreadDMs}/>
+      <NotificationCenter user={user} isOpen={notifOpen} onClose={() => setNotifOpen(false)}/>
     </>
   );
 }

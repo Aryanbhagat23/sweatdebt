@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "../firebase";
 import {
@@ -115,7 +115,7 @@ function Toggle({ value, onChange }){
 }
 
 // ─── main component ────────────────────────────────────────────────────────────
-export default function ProfileOverlay({ user, isOpen, onClose }){
+export default function ProfileOverlay({ user }){
   const navigate = useNavigate();
 
   // profile data
@@ -198,21 +198,9 @@ export default function ProfileOverlay({ user, isOpen, onClose }){
     return ()=>unsub();
   },[user, isOpen]);
 
-  // ── swipe down to close ──────────────────────────────────────────────────────
-  const sheetRef = useRef(null);
-  const dragStart = useRef(null);
-
-  const onTouchStart = (e) => { dragStart.current = e.touches[0].clientY; };
-  const onTouchEnd   = (e) => {
-    if (dragStart.current === null) return;
-    const dy = e.changedTouches[0].clientY - dragStart.current;
-    if (dy > 80) onClose(); // swiped down 80px → close
-    dragStart.current = null;
-  };
-
   // ── derived ───────────────────────────────────────────────────────────────────
   // ⚠️ All hooks above — safe to return null now
-  if (!isOpen) return null;
+  if (!user) return null;
   const tier      = getTier(profile.honourScore||0);
   const winRate   = stats.total>0 ? Math.round((stats.wins/stats.total)*100) : 0;
   const displayName = profile.displayName||user?.displayName||"Athlete";
@@ -539,29 +527,16 @@ export default function ProfileOverlay({ user, isOpen, onClose }){
   );
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // MAIN SCREEN
+  // MAIN SCREEN — now a full page, not a bottom sheet
   // ─────────────────────────────────────────────────────────────────────────────
   return (
     <div style={{
-      position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:5000,
-      display:"flex",alignItems:"flex-end",
-    }} onClick={onClose}>
-      <div
-        onTouchStart={onTouchStart}
-        onTouchEnd={onTouchEnd}
-        onClick={e=>e.stopPropagation()} style={{
-        background:MINT,width:"100%",maxWidth:"480px",
-        borderRadius:"24px 24px 0 0",
-        maxHeight:"92vh",overflowY:"auto",paddingBottom:"32px",
-        margin:"0 auto",
-      }}>
-
-        {/* drag handle — swipe this down to close */}
-        <div style={{height:"4px",width:"44px",background:"#9ca3af",borderRadius:"2px",margin:"12px auto 0",cursor:"grab"}}/>
-
+      minHeight:"100vh", background:MINT,
+      paddingBottom:"90px", overflowY:"auto",
+    }}>
         {/* ── PROFILE HEADER ── */}
         <div style={{
-          background:CHALKBOARD,margin:"16px",borderRadius:"20px",padding:"20px",
+          background:CHALKBOARD,margin:"0 0 16px",padding:"52px 16px 20px",
           position:"relative",overflow:"hidden",
         }}>
           {/* chalk texture lines */}
@@ -645,6 +620,8 @@ export default function ProfileOverlay({ user, isOpen, onClose }){
             {emoji:"✏️",label:"Edit Profile",  action:()=>goTo("/edit-profile")},
             {emoji:"⚔️",label:"New Bet",       action:()=>goTo("/create")},
             {emoji:"👥",label:"Group Bets",    action:()=>goTo("/group-bets")},
+            {emoji:"📤",label:"Share My Card", action:()=>goTo("/sweat-card")},
+            {emoji:"🏆",label:"Leaderboard",   action:()=>goTo("/leaderboard")},
           ].map(a=>(
             <button key={a.label} onClick={a.action} style={{
               background:WHITE,border:`1px solid ${ACCENT}30`,borderRadius:"14px",
@@ -697,7 +674,7 @@ export default function ProfileOverlay({ user, isOpen, onClose }){
 
         <SectionTitle label=""/>
         <Card style={{margin:"0 16px 12px"}}>
-          <Row icon="🚪" label="Log Out" onClick={()=>{onClose();navigate("/logout");}} danger/>
+          <Row icon="🚪" label="Log Out" onClick={()=>navigate("/logout")} danger/>
         </Card>
 
         <p style={{
@@ -706,7 +683,6 @@ export default function ProfileOverlay({ user, isOpen, onClose }){
         }}>
           SweatDebt · v1.0 · Made with 💪
         </p>
-      </div>
     </div>
   );
 }
@@ -715,17 +691,12 @@ export default function ProfileOverlay({ user, isOpen, onClose }){
 function Overlay({ children, title, onBack }){
   return (
     <div style={{
-      position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:6000,
-      display:"flex",alignItems:"flex-end",justifyContent:"center",
+      minHeight:"100vh", background:MINT,
+      paddingBottom:"90px",
     }}>
-      <div style={{
-        background:MINT,width:"100%",maxWidth:"480px",
-        borderRadius:"24px 24px 0 0",maxHeight:"92vh",overflowY:"auto",
-        paddingBottom:"32px",
-      }}>
       {/* header */}
       <div style={{
-        background:CHALKBOARD,padding:"16px",
+        background:CHALKBOARD,padding:"52px 16px 16px",
         display:"flex",alignItems:"center",gap:"12px",
         position:"sticky",top:0,zIndex:10,
       }}>
@@ -739,7 +710,6 @@ function Overlay({ children, title, onBack }){
         </span>
       </div>
       <div style={{padding:"12px 16px"}}>{children}</div>
-    </div>
     </div>
   );
 }
