@@ -248,7 +248,7 @@ export default function ProfileOverlay({ user }){
   }
 
   // ── navigate helper ───────────────────────────────────────────────────────────
-  function goTo(path){ onClose(); navigate(path); }
+  function goTo(path){ navigate(path); }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // SCREENS
