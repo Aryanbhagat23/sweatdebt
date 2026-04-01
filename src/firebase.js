@@ -20,26 +20,23 @@ export const facebookProvider = new FacebookAuthProvider();
 export const db = getFirestore(app);
 export const messaging = typeof window !== "undefined" ? getMessaging(app) : null;
 
-const VAPID_KEY = "YOUR_VAPID_KEY_HERE";
+// ─── VAPID Key ─────────────────────────────────────────────────────────────────
+// Get this from: Firebase Console → Project Settings → Cloud Messaging
+// → Web Push certificates → Key pair
+const VAPID_KEY = "BNBjCh5qdB8_gvlGqD0tjYlYq9UTz0j2BWNevcQAMTLmPokHteb_u1ZKUnN0srqNVtNJ7ChWYJX-M5M8ZRDnDDo"; // ← paste your key here
 
 // ─── Username helpers ──────────────────────────────────────────────────────────
-
-// Check if a username is already taken
 export const isUsernameTaken = async (username) => {
   const snap = await getDoc(doc(db, "usernames", username.toLowerCase()));
   return snap.exists();
 };
 
 // ─── User profile ──────────────────────────────────────────────────────────────
-
-// Called every time a user logs in.
-// Returns { isNew, needsOnboarding } so App.js knows whether to show onboarding.
 export const saveUserProfile = async (user, extraData = {}) => {
   const userRef = doc(db, "users", user.uid);
   const existing = await getDoc(userRef);
 
   if (!existing.exists()) {
-    // Brand new user — create their profile
     const defaultUsername =
       (user.displayName?.toLowerCase().replace(/\s+/g, "") ||
         user.email?.split("@")[0] ||
@@ -57,17 +54,15 @@ export const saveUserProfile = async (user, extraData = {}) => {
       wins: 0,
       losses: 0,
       fcmToken: null,
-      needsOnboarding: true, // triggers onboarding flow
+      needsOnboarding: true,
       ...extraData,
     });
 
-    // Reserve the username so no one else can take it
     const uname = extraData.username || defaultUsername;
     await setDoc(doc(db, "usernames", uname.toLowerCase()), { uid: user.uid });
 
     return { isNew: true, needsOnboarding: true };
   } else {
-    // Existing user — just update last seen
     await updateDoc(userRef, { lastSeen: serverTimestamp() });
     return {
       isNew: false,
@@ -76,7 +71,6 @@ export const saveUserProfile = async (user, extraData = {}) => {
   }
 };
 
-// Called when the user finishes the onboarding flow
 export const completeOnboarding = async (uid, { displayName, username, photoURL, bio }) => {
   await updateDoc(doc(db, "users", uid), {
     displayName,
@@ -86,22 +80,22 @@ export const completeOnboarding = async (uid, { displayName, username, photoURL,
     needsOnboarding: false,
     updatedAt: serverTimestamp(),
   });
-  // Reserve the chosen username
   await setDoc(doc(db, "usernames", username.toLowerCase()), { uid });
 };
 
 // ─── Notifications ─────────────────────────────────────────────────────────────
-
-// Request browser notification permission and save the FCM token
 export const requestNotificationPermission = async (userId) => {
   if (!messaging) return null;
   try {
     const permission = await Notification.requestPermission();
-    if (permission !== "granted") return null;
+    if (permission !== "granted") {
+      console.log("Notification permission denied");
+      return null;
+    }
     const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-    if (token) {
+    if (token && userId) {
       await updateDoc(doc(db, "users", userId), { fcmToken: token });
-      console.log("FCM token saved");
+      console.log("✅ FCM token saved:", token.slice(0, 20) + "...");
     }
     return token;
   } catch (error) {
@@ -110,32 +104,21 @@ export const requestNotificationPermission = async (userId) => {
   }
 };
 
-// Listen for foreground push messages
 export const onForegroundMessage = (callback) => {
   if (!messaging) return;
   return onMessage(messaging, callback);
 };
 
-// Write a notification document so the recipient sees it in their bell
 export const sendNotification = async ({
-  toUserId,
-  fromUserId,
-  fromName,
-  fromPhoto,
-  type,
-  message,
-  link,
+  toUserId, fromUserId, fromName, fromPhoto, type, message, link,
 }) => {
   try {
     await setDoc(
       doc(db, "notifications", `${toUserId}_${type}_${fromUserId}_${Date.now()}`),
       {
-        toUserId,
-        fromUserId,
-        fromName,
+        toUserId, fromUserId, fromName,
         fromPhoto: fromPhoto || null,
-        type,
-        message,
+        type, message,
         link: link || null,
         read: false,
         createdAt: serverTimestamp(),

@@ -19,9 +19,9 @@ export default function PWAInstallPrompt() {
       return;
     }
 
-    // Dismissed within last 3 days — don't show
-    const dismissed = localStorage.getItem('pwa-dismissed');
-    if (dismissed && Date.now() - parseInt(dismissed) < 3 * 86400000) return;
+    // TEMP: clear dismissed flag so it always shows during testing
+    // Remove this line when you go to production
+    localStorage.removeItem('pwa-dismissed');
 
     const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
     setIsIOS(ios);
@@ -188,7 +188,7 @@ export default function PWAInstallPrompt() {
           }}>
             Not now
           </button>
-          <button onClick={handleInstall} style={{
+          <button onClick={showIOSSteps ? handleDismiss : handleInstall} style={{
             flex:2, padding:"14px",
             background:CHALK, border:"none",
             borderRadius:"14px",

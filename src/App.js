@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter, Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { auth, saveUserProfile, db } from "./firebase";
+import { requestNotificationPermission, onForegroundMessage } from "./firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, onSnapshot, collection, query, where } from "firebase/firestore";
 import T from "./theme";
@@ -225,6 +226,8 @@ export default function App() {
         const r = await saveUserProfile(u);
         setUser(u);
         setNeedsOnboarding(r?.isNew || r?.needsOnboarding || false);
+        // ✅ Request push notification permission after login
+        requestNotificationPermission(u.uid).catch(() => {});
       } else {
         setUser(null);
         setNeedsOnboarding(false);
