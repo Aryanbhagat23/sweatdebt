@@ -28,7 +28,7 @@ import Seasons          from "./pages/Seasons";
 import ChangePassword   from "./pages/ChangePassword";
 import AdminDashboard   from "./pages/AdminDashboard";
 import SweatCard        from "./pages/Sweatcard";
-import PWAInstallPrompt from "./components/PWAInstallPrompt";
+import ChallengePage    from "./pages/Challengepage";
 import JuryVote         from "./pages/Juryvote";
 
 // ── Logout page — signs out then redirects to auth ────────────────────────────
@@ -73,64 +73,91 @@ function NavBar({ user, livePhoto, unreadDMs }) {
       backdropFilter:"blur(20px)", WebkitBackdropFilter:"blur(20px)",
       borderTop:`1px solid ${T.border}`,
       display:"flex", alignItems:"flex-start", justifyContent:"space-around",
-      paddingTop:"10px", paddingBottom:"env(safe-area-inset-bottom,0)",
+      paddingTop:"8px", paddingBottom:"env(safe-area-inset-bottom,0)",
       zIndex:1000,
     }}>
       {[
-        { to:"/",            icon:"⚔️", label:"BETS"  },
-        { to:"/feed",        icon:"▶",  label:"FEED"  },
-        { to:"/inbox",       icon:"💬", label:"CHAT",  badge:unreadDMs },
-        { to:"/leaderboard", icon:"🏆", label:"RANKS" },
+        { to:"/",  label:"BETS", icon: (c) => (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.5 17.5L3 6V3h3l11.5 11.5"/>
+            <path d="M13 19l6-6"/><path d="M16 16l4 4"/><path d="M19 21l2-2"/>
+            <path d="M9.5 6.5L8 8l-3-3"/>
+          </svg>
+        )},
+        { to:"/feed", label:"FEED", icon: (c) => (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3"/>
+          </svg>
+        )},
+        { to:"/inbox", label:"CHAT", badge:unreadDMs, icon: (c) => (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+        )},
+        { to:"/leaderboard", label:"RANKS", icon: (c) => (
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={c} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M8 21H5a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h3"/>
+            <path d="M16 21h3a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3"/>
+            <path d="M12 21V7a2 2 0 0 0-2-2H10a2 2 0 0 0-2 2v14"/>
+          </svg>
+        )},
       ].map(item => (
         <NavLink key={item.to} to={item.to} end={item.to==="/"} style={({ isActive }) => ({
-          display:"flex", flexDirection:"column", alignItems:"center", gap:"2px",
+          display:"flex", flexDirection:"column", alignItems:"center", gap:"3px",
           textDecoration:"none", flex:1, padding:"2px 0",
           color: isActive ? T.accent : T.textMuted,
         })}>
-          <div style={{ fontSize:"20px", lineHeight:1, position:"relative" }}>
-            {item.icon}
-            {item.badge > 0 && (
-              <div style={{
-                position:"absolute", top:"-4px", right:"-6px",
-                width:"16px", height:"16px", borderRadius:"50%",
-                background:T.accent, border:`2px solid ${T.bg0}`,
-                display:"flex", alignItems:"center", justifyContent:"center",
-                fontFamily:T.fontMono, fontSize:"9px", fontWeight:"700", color:"#fff",
-              }}>
-                {item.badge > 9 ? "9+" : item.badge}
+          {({ isActive }) => (
+            <>
+              <div style={{ lineHeight:1, position:"relative" }}>
+                {item.icon(isActive ? T.accent : T.textMuted)}
+                {item.badge > 0 && (
+                  <div style={{
+                    position:"absolute", top:"-4px", right:"-6px",
+                    width:"16px", height:"16px", borderRadius:"50%",
+                    background:T.accent, border:`2px solid ${T.bg0}`,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontFamily:T.fontMono, fontSize:"9px", fontWeight:"700", color:"#fff",
+                  }}>
+                    {item.badge > 9 ? "9+" : item.badge}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-          <div style={{ fontFamily:T.fontMono, fontSize:"9px", fontWeight:"600", letterSpacing:"0.08em" }}>
-            {item.label}
-          </div>
+              <div style={{ fontFamily:T.fontMono, fontSize:"9px", fontWeight:"600", letterSpacing:"0.08em" }}>
+                {item.label}
+              </div>
+            </>
+          )}
         </NavLink>
       ))}
 
-      {/* ME button — now a proper NavLink like all other tabs */}
+      {/* ME button */}
       <NavLink to="/me" style={({ isActive }) => ({
-        display:"flex", flexDirection:"column", alignItems:"center", gap:"2px",
+        display:"flex", flexDirection:"column", alignItems:"center", gap:"3px",
         flex:1, padding:"2px 0", cursor:"pointer", textDecoration:"none",
         color: isActive ? T.accent : T.textMuted,
       })}>
-        <div style={{ fontSize:"20px", lineHeight:1 }}>
-          {livePhoto
-            ? <img src={livePhoto} alt="" style={{
-                width:"26px", height:"26px", borderRadius:"50%",
-                objectFit:"cover", border:`2px solid ${T.accent}`, display:"block",
-              }}/>
-            : <div style={{
-                width:"26px", height:"26px", borderRadius:"50%",
-                background:T.panel, display:"flex", alignItems:"center", justifyContent:"center",
-                fontFamily:T.fontDisplay, fontSize:"12px", color:T.accent,
-              }}>
-                {user?.displayName?.charAt(0) || "?"}
-              </div>
-          }
-        </div>
-        <div style={{ fontFamily:T.fontMono, fontSize:"9px", fontWeight:"600", letterSpacing:"0.08em" }}>
-          ME
-        </div>
+        {({ isActive }) => (
+          <>
+            <div style={{ lineHeight:1 }}>
+              {livePhoto
+                ? <img src={livePhoto} alt="" style={{
+                    width:"24px", height:"24px", borderRadius:"50%",
+                    objectFit:"cover",
+                    border:`2px solid ${isActive ? T.accent : T.border}`,
+                    display:"block",
+                  }}/>
+                : <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={isActive ? T.accent : T.textMuted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                    <circle cx="12" cy="7" r="4"/>
+                  </svg>
+              }
+            </div>
+            <div style={{ fontFamily:T.fontMono, fontSize:"9px", fontWeight:"600", letterSpacing:"0.08em" }}>
+              ME
+            </div>
+          </>
+        )}
       </NavLink>
     </nav>
   );
@@ -202,12 +229,12 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
         <Route path="/change-password"       element={<ChangePassword user={user}/>}/>
         <Route path="/admin"                 element={<AdminDashboard user={user}/>}/>
         <Route path="/sweat-card"            element={<SweatCard user={user}/>}/>
+        <Route path="/challenge/:betId"      element={<ChallengePage user={user}/>}/>
         <Route path="/logout"               element={<LogoutPage/>}/>
       </Routes>
 
       <NavBar user={user} livePhoto={livePhoto} unreadDMs={unreadDMs}/>
       <NotificationCenter user={user} isOpen={notifOpen} onClose={() => setNotifOpen(false)}/>
-      <PWAInstallPrompt/>
     </>
   );
 }

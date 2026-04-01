@@ -2,197 +2,233 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { db } from "../firebase";
 import {
-  collection, getDocs, query, where,
-  doc, setDoc, deleteDoc, onSnapshot, serverTimestamp,
+  collection, query, where, getDocs,
+  doc, setDoc, deleteDoc, onSnapshot, getDoc,
 } from "firebase/firestore";
 import T from "../theme";
 
-const C = {
-  page:"#f0fdf4", card:"#ffffff", border:"#d1fae5",
-  heading:"#052e16", muted:"#6b7280", accent:"#10b981",
-};
+const CHALK  = "#2C4A3E";
+const MINT   = "#f0fdf4";
+const ACCENT = "#10b981";
+const MUTED  = "#6b7280";
+const BORDER = "#d1fae5";
+const WHITE  = "#ffffff";
 
 export default function FindFriends({ user }) {
-  const navigate = useNavigate();
+  const navigate  = useNavigate();
+  const [search,  setSearch]  = useState("");
+  const [results, setResults] = useState([]);
+  const [friends, setFriends] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [adding,  setAdding]  = useState({});
 
-  const [searchTerm, setSearchTerm] = useState("");
-  const [results,    setResults]    = useState([]);
-  const [searching,  setSearching]  = useState(false);
-  const [friends,    setFriends]    = useState([]);
-  const [friendUids, setFriendUids] = useState(new Set());
-  const [loadingFriend, setLoadingFriend] = useState(null);
-
-  /* load existing friends */
+  // load existing friends
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(collection(db,"users",user.uid,"friends"), snap => {
-      const data = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-      setFriends(data);
-      setFriendUids(new Set(data.map(f=>f.id)));
-    });
+    const unsub = onSnapshot(
+      collection(db, "users", user.uid, "friends"),
+      snap => setFriends(snap.docs.map(d => ({ uid:d.id, ...d.data() })))
+    );
     return () => unsub();
   }, [user]);
 
+  const friendUids = new Set(friends.map(f => f.uid));
+
   const handleSearch = async () => {
-    const term = searchTerm.trim().toLowerCase();
-    if (!term || term.length < 2) return;
-    setSearching(true);
+    if (!search.trim()) return;
+    setLoading(true);
+    setResults([]);
     try {
-      const usersRef = collection(db,"users");
-      // search by username
-      const q1 = query(usersRef, where("username",">=",term), where("username","<=",term+"\uf8ff"));
-      // search by displayName lowercase
-      const q2 = query(usersRef, where("displayNameLower",">=",term), where("displayNameLower","<=",term+"\uf8ff"));
+      const term = search.trim().toLowerCase();
+      // Search by username
+      const q1 = query(collection(db,"users"), where("username",">=",term), where("username","<=",term+"\uf8ff"));
+      // Search by displayName
+      const q2 = query(collection(db,"users"), where("displayName",">=",search.trim()), where("displayName","<=",search.trim()+"\uf8ff"));
 
       const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+
       const seen = new Set();
       const all  = [];
       [...s1.docs, ...s2.docs].forEach(d => {
-        if (!seen.has(d.id) && d.id !== user.uid) {
-          seen.add(d.id);
-          all.push({ id:d.id, ...d.data() });
-        }
+        if (d.id === user.uid) return; // exclude self
+        if (seen.has(d.id)) return;    // deduplicate
+        seen.add(d.id);
+        all.push({ uid:d.id, ...d.data() });
       });
       setResults(all);
     } catch(e) { console.error(e); }
-    setSearching(false);
+    setLoading(false);
   };
 
-  const toggleFriend = async (person) => {
-    if (loadingFriend) return;
-    setLoadingFriend(person.id);
+  const handleAdd = async (person) => {
+    setAdding(a => ({ ...a, [person.uid]:true }));
     try {
-      const myRef    = doc(db,"users",user.uid,"friends",person.id);
-      const theirRef = doc(db,"users",person.id,"friends",user.uid);
-
-      if (friendUids.has(person.id)) {
-        await deleteDoc(myRef);
-        await deleteDoc(theirRef);
-      } else {
-        await setDoc(myRef, {
-          uid:         person.id,
-          displayName: person.displayName || "Unknown",
-          username:    person.username    || "",
-          email:       person.email       || "",
-          photoURL:    person.photoURL    || null,
-          addedAt:     serverTimestamp(),
-        });
-        await setDoc(theirRef, {
-          uid:         user.uid,
-          displayName: user.displayName   || "",
-          username:    "",
-          email:       user.email         || "",
-          photoURL:    user.photoURL      || null,
-          addedAt:     serverTimestamp(),
-        });
-      }
+      // Add to my friends
+      await setDoc(doc(db,"users",user.uid,"friends",person.uid), {
+        uid:         person.uid,
+        displayName: person.displayName || person.username || "Unknown",
+        username:    person.username    || "",
+        email:       person.email       || "",
+        photoURL:    person.photoURL    || null,
+      });
+      // Add me to their friends
+      const mySnap = await getDoc(doc(db,"users",user.uid));
+      const me     = mySnap.data() || {};
+      await setDoc(doc(db,"users",person.uid,"friends",user.uid), {
+        uid:         user.uid,
+        displayName: me.displayName || user.displayName || "Unknown",
+        username:    me.username    || "",
+        email:       me.email       || user.email || "",
+        photoURL:    me.photoURL    || user.photoURL || null,
+      });
     } catch(e) { console.error(e); }
-    setLoadingFriend(null);
+    setAdding(a => ({ ...a, [person.uid]:false }));
   };
 
-  const PersonRow = ({ person, showRemove }) => {
-    const isFr = friendUids.has(person.id);
-    const isLoading = loadingFriend === person.id;
-    return (
-      <div style={{ display:"flex", alignItems:"center", gap:"12px", padding:"12px 16px", background:C.card, border:`1px solid ${C.border}`, borderRadius:"14px" }}>
-        {/* avatar */}
-        <div onClick={()=>navigate(`/profile/${person.id}`)} style={{ cursor:"pointer", flexShrink:0 }}>
-          {person.photoURL
-            ? <img src={person.photoURL} alt="" style={{ width:"46px", height:"46px", borderRadius:"50%", objectFit:"cover", border:`2px solid ${C.border}` }}/>
-            : <div style={{ width:"46px", height:"46px", borderRadius:"50%", background:`${C.accent}20`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:"20px", fontWeight:"700", color:C.accent, border:`2px solid ${C.border}` }}>
-                {(person.displayName||"?").charAt(0).toUpperCase()}
-              </div>
-          }
-        </div>
-        {/* info */}
-        <div style={{ flex:1, cursor:"pointer" }} onClick={()=>navigate(`/profile/${person.id}`)}>
-          <div style={{ fontSize:"15px", fontWeight:"600", color:C.heading }}>{person.displayName||"Unknown"}</div>
-          <div style={{ fontSize:"12px", color:C.muted, fontFamily:"monospace" }}>@{person.username||person.displayName?.toLowerCase().replace(/\s/g,"")}</div>
-        </div>
-        {/* action button */}
-        <button type="button" onClick={()=>toggleFriend(person)} disabled={!!isLoading}
-          style={{
-            padding:"8px 16px", borderRadius:"20px", fontSize:"12px", fontFamily:"monospace", fontWeight:"700", cursor:"pointer", transition:"all 0.2s", flexShrink:0,
-            background: isFr ? C.page      : C.heading,
-            border:     isFr ? `1px solid #ef444460` : "none",
-            color:      isFr ? "#ef4444"   : C.accent,
-            opacity:    isLoading ? 0.5 : 1,
-          }}>
-          {isLoading ? "..." : isFr ? "Remove" : "+ Add"}
-        </button>
-      </div>
-    );
+  const handleRemove = async (uid) => {
+    try {
+      await deleteDoc(doc(db,"users",user.uid,"friends",uid));
+      await deleteDoc(doc(db,"users",uid,"friends",user.uid));
+    } catch(e) { console.error(e); }
   };
+
+  const UserRow = ({ person, isFriend }) => (
+    <div style={{
+      display:"flex", alignItems:"center", gap:"12px",
+      background:WHITE, border:`1px solid ${BORDER}`,
+      borderRadius:"16px", padding:"12px 14px",
+      marginBottom:"8px",
+    }}>
+      {person.photoURL
+        ? <img src={person.photoURL} alt="" style={{ width:"44px", height:"44px", borderRadius:"50%", objectFit:"cover", border:`2px solid ${BORDER}`, flexShrink:0 }}/>
+        : <div style={{
+            width:"44px", height:"44px", borderRadius:"50%", flexShrink:0,
+            background:CHALK, display:"flex", alignItems:"center", justifyContent:"center",
+            fontFamily:T.fontDisplay, fontSize:"18px", color:ACCENT,
+          }}>
+            {(person.displayName || person.username || "?").charAt(0).toUpperCase()}
+          </div>
+      }
+      <div style={{ flex:1, minWidth:0 }} onClick={() => navigate(`/profile/${person.uid}`)} style={{ flex:1, minWidth:0, cursor:"pointer" }}>
+        <div style={{ fontFamily:"system-ui", fontSize:"14px", fontWeight:"600", color:CHALK }}>
+          {person.displayName || person.username || "Unknown"}
+        </div>
+        <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:MUTED, marginTop:"2px" }}>
+          @{person.username || person.uid.slice(0,8)}
+        </div>
+      </div>
+      {isFriend ? (
+        <button onClick={() => handleRemove(person.uid)} style={{
+          padding:"7px 14px", background:"rgba(239,68,68,0.08)",
+          border:"1.5px solid rgba(239,68,68,0.3)",
+          borderRadius:"20px", fontFamily:T.fontMono, fontSize:"11px",
+          fontWeight:"700", color:"#ef4444", cursor:"pointer", flexShrink:0,
+        }}>Remove</button>
+      ) : (
+        <button
+          onClick={() => handleAdd(person)}
+          disabled={adding[person.uid]}
+          style={{
+            padding:"7px 14px",
+            background: adding[person.uid] ? MINT : CHALK,
+            border:"none", borderRadius:"20px",
+            fontFamily:T.fontMono, fontSize:"11px", fontWeight:"700",
+            color: adding[person.uid] ? MUTED : ACCENT,
+            cursor: adding[person.uid] ? "not-allowed" : "pointer", flexShrink:0,
+          }}>
+          {adding[person.uid] ? "Adding…" : "+ Add"}
+        </button>
+      )}
+    </div>
+  );
 
   return (
-    <div style={{ minHeight:"100vh", background:C.page, paddingBottom:"90px" }}>
+    <div style={{ minHeight:"100vh", background:MINT, paddingBottom:"40px" }}>
 
-      {/* header */}
-      <div style={{ display:"flex", alignItems:"center", gap:"12px", padding:"52px 16px 16px" }}>
-        <button type="button" onClick={()=>navigate(-1)}
-          style={{ width:"44px", height:"44px", borderRadius:"50%", background:C.card, border:`1px solid ${C.border}`, color:C.heading, fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          ←
-        </button>
+      {/* Header */}
+      <div style={{ background:CHALK, padding:"52px 20px 20px", display:"flex", alignItems:"center", gap:"12px" }}>
+        <button onClick={() => navigate(-1)} style={{
+          width:"36px", height:"36px", borderRadius:"50%",
+          background:"rgba(255,255,255,0.12)", border:"none",
+          color:"#fff", fontSize:"18px", cursor:"pointer",
+          display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+        }}>‹</button>
         <div>
-          <div style={{ fontSize:"28px", fontWeight:"700", color:C.heading, fontStyle:"italic", fontFamily:"monospace", letterSpacing:"0.04em" }}>Find Friends</div>
-          <div style={{ fontSize:"12px", color:C.muted }}>{friends.length} friend{friends.length!==1?"s":""} so far</div>
+          <div style={{ fontFamily:T.fontDisplay, fontSize:"26px", color:"#fff", letterSpacing:"0.04em", fontStyle:"italic" }}>
+            Find Friends
+          </div>
+          <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:"rgba(255,255,255,0.45)", marginTop:"2px" }}>
+            {friends.length} friend{friends.length !== 1 ? "s" : ""} so far
+          </div>
         </div>
       </div>
 
-      {/* search */}
-      <div style={{ padding:"0 16px 16px" }}>
-        <div style={{ display:"flex", gap:"8px" }}>
+      <div style={{ padding:"20px" }}>
+
+        {/* Search bar */}
+        <div style={{ display:"flex", gap:"8px", marginBottom:"20px" }}>
           <input
-            value={searchTerm}
-            onChange={e=>setSearchTerm(e.target.value)}
-            onKeyDown={e=>e.key==="Enter"&&handleSearch()}
-            placeholder="Search by name or username..."
-            style={{ flex:1, background:C.card, border:`1px solid ${C.border}`, borderRadius:"14px", padding:"14px 16px", color:C.heading, fontSize:"15px", fontFamily:"system-ui", outline:"none" }}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            onKeyDown={e => e.key==="Enter" && handleSearch()}
+            placeholder="Search by name or @username…"
+            style={{
+              flex:1, padding:"13px 16px",
+              background:WHITE, border:`1.5px solid ${BORDER}`,
+              borderRadius:"14px", fontFamily:"system-ui", fontSize:"14px",
+              color:CHALK, outline:"none",
+            }}
           />
-          <button type="button" onClick={handleSearch} disabled={searching}
-            style={{ padding:"14px 20px", background:C.heading, border:"none", borderRadius:"14px", fontFamily:"monospace", fontSize:"13px", fontWeight:"700", color:C.accent, cursor:"pointer", flexShrink:0 }}>
-            {searching ? "..." : "SEARCH"}
+          <button onClick={handleSearch} disabled={loading} style={{
+            padding:"13px 20px", background:CHALK, border:"none",
+            borderRadius:"14px", fontFamily:T.fontMono, fontSize:"12px",
+            fontWeight:"700", color:ACCENT, cursor:"pointer", flexShrink:0, letterSpacing:"0.06em",
+          }}>
+            {loading ? "…" : "SEARCH"}
           </button>
         </div>
-      </div>
 
-      {/* search results */}
-      {results.length > 0 && (
-        <div style={{ padding:"0 16px 20px" }}>
-          <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.muted, letterSpacing:"0.1em", marginBottom:"10px" }}>
-            RESULTS ({results.length})
-          </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-            {results.map(p => <PersonRow key={p.id} person={p} />)}
-          </div>
-        </div>
-      )}
-
-      {results.length === 0 && searchTerm && !searching && (
-        <div style={{ textAlign:"center", padding:"24px", color:C.muted, fontSize:"14px" }}>
-          No users found for "{searchTerm}"
-        </div>
-      )}
-
-      {/* ── FRIEND LIST — always visible ── */}
-      <div style={{ padding:"0 16px" }}>
-        <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.muted, letterSpacing:"0.1em", marginBottom:"10px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span>YOUR FRIENDS ({friends.length})</span>
-        </div>
-
-        {friends.length === 0 ? (
-          <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"32px 20px", textAlign:"center" }}>
-            <div style={{ fontSize:"36px", marginBottom:"10px" }}>👥</div>
-            <div style={{ fontSize:"16px", fontWeight:"600", color:C.heading, marginBottom:"4px" }}>No friends yet</div>
-            <div style={{ fontSize:"13px", color:C.muted }}>Search above to find and add friends</div>
-          </div>
-        ) : (
-          <div style={{ display:"flex", flexDirection:"column", gap:"8px" }}>
-            {friends.map(f => (
-              <PersonRow key={f.id} person={{ ...f, id:f.id }} showRemove />
+        {/* Search results */}
+        {results.length > 0 && (
+          <div style={{ marginBottom:"24px" }}>
+            <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:MUTED, letterSpacing:"0.1em", marginBottom:"10px" }}>
+              SEARCH RESULTS ({results.length})
+            </div>
+            {results.map(p => (
+              <UserRow key={p.uid} person={p} isFriend={friendUids.has(p.uid)}/>
             ))}
           </div>
         )}
+
+        {results.length === 0 && search && !loading && (
+          <div style={{ textAlign:"center", padding:"24px", fontFamily:"system-ui", fontSize:"14px", color:MUTED }}>
+            No users found for "{search}"
+          </div>
+        )}
+
+        {/* Friends list */}
+        <div>
+          <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:MUTED, letterSpacing:"0.1em", marginBottom:"10px" }}>
+            YOUR FRIENDS ({friends.length})
+          </div>
+          {friends.length === 0 ? (
+            <div style={{
+              background:WHITE, border:`1px solid ${BORDER}`, borderRadius:"16px",
+              padding:"32px", textAlign:"center",
+            }}>
+              <div style={{ fontSize:"36px", marginBottom:"10px" }}>👥</div>
+              <div style={{ fontFamily:T.fontDisplay, fontSize:"20px", color:CHALK, marginBottom:"6px" }}>No friends yet</div>
+              <div style={{ fontFamily:"system-ui", fontSize:"13px", color:MUTED }}>
+                Search for someone above or share your challenge link to get started
+              </div>
+            </div>
+          ) : (
+            // Deduplicate friends by uid before rendering
+            [...new Map(friends.map(f => [f.uid, f])).values()].map(f => (
+              <UserRow key={f.uid} person={f} isFriend={true}/>
+            ))
+          )}
+        </div>
       </div>
     </div>
   );

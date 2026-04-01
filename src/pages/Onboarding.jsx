@@ -1,187 +1,300 @@
-import React, { useState } from "react";
-import { db } from "../firebase";
+import React, { useState, useRef } from "react";
+import { useNavigate } from "react-router-dom";
+import { db, auth } from "../firebase";
 import { doc, updateDoc, setDoc, serverTimestamp } from "firebase/firestore";
-import T from "../theme";
+import { updateProfile } from "firebase/auth";
 
-const CLOUDINARY_URL = "https://api.cloudinary.com/v1_1/daf3vs5n6/image/upload";
-const UPLOAD_PRESET  = "jrmodcfe";
+const CHALK  = "#2C4A3E";
+const MINT   = "#f0fdf4";
+const ACCENT = "#10b981";
+const WHITE  = "#ffffff";
+const MUTED  = "#6b7280";
+const BORDER = "#d1fae5";
 
-const STEPS = [
-  { title: "Your username",  sub: "Pick a unique @handle" },
-  { title: "Your photo",     sub: "Add a profile picture" },
-  { title: "Your sports",    sub: "What do you bet on?" },
+const SPORTS = [
+  { id:"football",   icon:"⚽", name:"Football"   },
+  { id:"basketball", icon:"🏀", name:"Basketball" },
+  { id:"cricket",    icon:"🏏", name:"Cricket"    },
+  { id:"gaming",     icon:"🎮", name:"Gaming"     },
+  { id:"mma",        icon:"🥊", name:"MMA"        },
+  { id:"running",    icon:"🏃", name:"Running"    },
+  { id:"tennis",     icon:"🎾", name:"Tennis"     },
+  { id:"chess",      icon:"♟️", name:"Chess"      },
 ];
-const SPORTS = ["🏏 Cricket","⚽ Football","🎮 Gaming","🏀 Basketball","🎾 Tennis","🏊 Swimming","🚴 Cycling","🥊 MMA","♟️ Chess","🎯 Custom"];
+
+const HOW_IT_WORKS = [
+  { emoji:"⚔️", title:"Make a bet",      desc:"Challenge a friend on anything — a game, a sport, a prediction." },
+  { emoji:"💀", title:"Loser pays up",   desc:"The loser has 24 hours to film themselves doing the forfeit workout." },
+  { emoji:"🏆", title:"Build honour",    desc:"Win bets, complete forfeits, climb the leaderboard. Your honour score is public." },
+];
 
 export default function Onboarding({ user, onComplete }) {
-  const [step,     setStep]     = useState(0);
-  const [username, setUsername] = useState("");
-  const [photo,    setPhoto]    = useState(null);
-  const [preview,  setPreview]  = useState(null);
-  const [sports,   setSports]   = useState([]);
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState("");
+  const navigate = useNavigate();
+  const [step,           setStep]           = useState(0); // 0=welcome, 1=profile, 2=done
+  const [username,       setUsername]       = useState("");
+  const [selectedSports, setSelectedSports] = useState([]);
+  const [saving,         setSaving]         = useState(false);
+  const [error,          setError]          = useState("");
+  const [usernameOk,     setUsernameOk]     = useState(null);
+  const checkTimer = useRef(null);
 
-  const progress = ((step + 1) / STEPS.length) * 100;
-
-  const next = async () => {
+  // ── username availability check ───────────────────────────────────────────
+  const handleUsernameChange = async (val) => {
+    const clean = val.toLowerCase().replace(/[^a-z0-9_]/g,"").slice(0,20);
+    setUsername(clean);
+    setUsernameOk(null);
     setError("");
-    if (step === 0) {
-      if (!username.trim() || username.length < 3) { setError("Username must be 3+ characters"); return; }
-      if (!/^[a-zA-Z0-9_]+$/.test(username)) { setError("Letters, numbers and _ only"); return; }
-    }
-    if (step < STEPS.length - 1) { setStep(s => s + 1); return; }
-
-    // Final submit
-    setLoading(true);
-    try {
-      let photoURL = user.photoURL || null;
-
-      // Upload photo to Cloudinary if selected
-      if (photo) {
-        const fd = new FormData();
-        fd.append("file", photo);
-        fd.append("upload_preset", UPLOAD_PRESET);
-        const res  = await fetch(CLOUDINARY_URL, { method: "POST", body: fd });
-        const data = await res.json();
-        photoURL   = data.secure_url;
-      }
-
-      await updateDoc(doc(db, "users", user.uid), {
-        username:           username.toLowerCase().trim(),
-        photoURL,
-        sports,
-        onboardingComplete: true,
-        updatedAt:          serverTimestamp(),
-      });
-      await setDoc(doc(db, "usernames", username.toLowerCase().trim()), { uid: user.uid }, { merge: true });
-      onComplete?.();
-    } catch (e) { setError(e.message || "Something went wrong."); }
-    setLoading(false);
+    if (clean.length < 3) return;
+    clearTimeout(checkTimer.current);
+    checkTimer.current = setTimeout(async () => {
+      try {
+        const { getDoc, doc: fDoc } = await import("firebase/firestore");
+        const snap = await getDoc(fDoc(db, "usernames", clean));
+        setUsernameOk(!snap.exists());
+      } catch(e) { setUsernameOk(true); }
+    }, 500);
   };
 
-  return (
-    <div style={{ minHeight: "100vh", background: T.bg0, display: "flex", flexDirection: "column", padding: "52px 20px 40px" }}>
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+  const toggleSport = (id) => {
+    setSelectedSports(s =>
+      s.includes(id) ? s.filter(x => x !== id) : [...s, id]
+    );
+  };
 
-      {/* Logo */}
-      <div style={{ textAlign: "center", marginBottom: "28px" }}>
-        <div style={{ fontFamily: T.fontDisplay, fontSize: "36px", color: T.panel, letterSpacing: "0.02em", fontStyle: "italic" }}>
-          Sweat<span style={{ color: T.accent }}>Debt</span>
+  // ── save and finish ───────────────────────────────────────────────────────
+  const handleFinish = async () => {
+    if (!username || username.length < 3) { setError("Username must be at least 3 characters."); return; }
+    if (usernameOk === false) { setError("That username is taken. Try another."); return; }
+    setSaving(true);
+    setError("");
+    try {
+      // Update Firebase Auth display name
+      if (auth.currentUser) {
+        await updateProfile(auth.currentUser, { displayName: username });
+      }
+      // Update Firestore user doc
+      await updateDoc(doc(db, "users", user.uid), {
+        username:        username.toLowerCase(),
+        displayName:     username,
+        sports:          selectedSports,
+        needsOnboarding: false,
+        updatedAt:       serverTimestamp(),
+      });
+      // Reserve username
+      await setDoc(doc(db, "usernames", username.toLowerCase()), { uid: user.uid });
+
+      onComplete();
+    } catch(e) {
+      console.error(e);
+      setError("Something went wrong. Try again.");
+    }
+    setSaving(false);
+  };
+
+  // ── SCREEN 0: Welcome ─────────────────────────────────────────────────────
+  if (step === 0) return (
+    <div style={{
+      minHeight:"100vh", background:CHALK,
+      display:"flex", flexDirection:"column",
+      padding:"0 0 40px",
+      position:"relative", overflow:"hidden",
+    }}>
+      {/* background text */}
+      <div style={{
+        position:"absolute", top:"30%", left:"-10%",
+        fontFamily:"'Bebas Neue',sans-serif", fontSize:"160px",
+        color:"rgba(255,255,255,0.03)", letterSpacing:"0.04em",
+        whiteSpace:"nowrap", transform:"rotate(-8deg)",
+        pointerEvents:"none", userSelect:"none",
+      }}>SWEAT DEBT SWEAT</div>
+
+      {/* header */}
+      <div style={{ padding:"60px 24px 0", position:"relative" }}>
+        <div style={{
+          fontFamily:"'Bebas Neue',sans-serif",
+          fontSize:"56px", lineHeight:0.9,
+          color:WHITE, letterSpacing:"0.04em",
+        }}>
+          Sweat<span style={{color:ACCENT}}>Debt</span>
+        </div>
+        <div style={{
+          fontFamily:"system-ui", fontSize:"18px",
+          color:"rgba(255,255,255,0.6)", marginTop:"10px",
+          lineHeight:"1.5",
+        }}>
+          Bet on yourself.<br/>
+          <span style={{color:ACCENT, fontWeight:"600"}}>Lose the bet, pay in sweat.</span>
         </div>
       </div>
 
-      {/* Progress bar */}
-      <div style={{ height: "4px", background: T.border, borderRadius: "2px", marginBottom: "8px" }}>
-        <div style={{ height: "100%", width: `${progress}%`, background: T.accent, borderRadius: "2px", transition: "width 0.35s ease" }} />
-      </div>
-      <div style={{ fontFamily: T.fontMono, fontSize: "10px", color: T.textMuted, letterSpacing: "0.08em", marginBottom: "28px" }}>
-        STEP {step + 1} OF {STEPS.length}
-      </div>
-
-      {/* Step header */}
-      <div style={{ marginBottom: "24px" }}>
-        <div style={{ fontFamily: T.fontDisplay, fontSize: "34px", color: T.panel, letterSpacing: "0.02em", fontStyle: "italic", lineHeight: 1 }}>{STEPS[step].title}</div>
-        <div style={{ fontFamily: T.fontBody, fontSize: "15px", color: T.textMuted, marginTop: "6px" }}>{STEPS[step].sub}</div>
-      </div>
-
-      {/* ── STEP 0: Username ── */}
-      {step === 0 && (
-        <div>
-          <div style={{ background: T.bg1, border: `1.5px solid ${T.border}`, borderRadius: T.r16, padding: "0 16px", display: "flex", alignItems: "center", gap: "10px", boxShadow: T.shadowSm }}>
-            <span style={{ fontFamily: T.fontMono, fontSize: "18px", color: T.textMuted }}>@</span>
-            <input
-              value={username}
-              onChange={e => { setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "")); setError(""); }}
-              placeholder="coolname123"
-              maxLength={20}
-              style={{ flex: 1, background: "transparent", border: "none", padding: "16px 0", color: T.textDark, fontSize: "18px", fontFamily: T.fontBody, fontWeight: "600", outline: "none", caretColor: T.accent }}
-            />
-          </div>
-          <div style={{ fontFamily: T.fontMono, fontSize: "11px", color: T.textMuted, marginTop: "8px", letterSpacing: "0.06em" }}>
-            Letters, numbers, underscores. Min 3 chars.
-          </div>
-        </div>
-      )}
-
-      {/* ── STEP 1: Photo ── */}
-      {step === 1 && (
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "16px" }}>
-          <div
-            style={{ width: "120px", height: "120px", borderRadius: "50%", background: preview ? "transparent" : T.bg3, border: `3px solid ${T.accentBorder}`, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", cursor: "pointer", boxShadow: T.shadowMd }}
-            onClick={() => document.getElementById("ob-photo")?.click()}
-          >
-            {preview
-              ? <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <div style={{ textAlign: "center" }}><div style={{ fontSize: "40px" }}>📷</div><div style={{ fontFamily: T.fontMono, fontSize: "10px", color: T.textMuted, marginTop: "4px" }}>TAP</div></div>
-            }
-          </div>
-          <input id="ob-photo" type="file" accept="image/*" style={{ display: "none" }}
-            onChange={e => { const f = e.target.files[0]; if (f) { setPhoto(f); setPreview(URL.createObjectURL(f)); } }} />
-          <button onClick={() => document.getElementById("ob-photo")?.click()}
-            style={{ background: "transparent", border: `1.5px solid ${T.borderMid}`, borderRadius: T.rFull, padding: "10px 22px", fontFamily: T.fontBody, fontSize: "14px", fontWeight: "600", color: T.panel, cursor: "pointer" }}>
-            {preview ? "Change photo" : "Choose photo"}
-          </button>
-          <button onClick={next} style={{ background: "transparent", border: "none", fontFamily: T.fontBody, fontSize: "14px", color: T.textMuted, cursor: "pointer", padding: "6px" }}>
-            Skip for now →
-          </button>
-        </div>
-      )}
-
-      {/* ── STEP 2: Sports ── */}
-      {step === 2 && (
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-          {SPORTS.map(s => {
-            const sel = sports.includes(s);
-            return (
-              <div key={s}
-                style={{ background: sel ? T.panel : T.bg1, border: `1.5px solid ${sel ? T.accent : T.border}`, borderRadius: T.r14, padding: "14px 16px", display: "flex", alignItems: "center", gap: "10px", cursor: "pointer", transition: "all 0.15s", boxShadow: T.shadowSm }}
-                onClick={() => setSports(p => sel ? p.filter(x => x !== s) : [...p, s])}>
-                <span style={{ fontSize: "20px" }}>{s.split(" ")[0]}</span>
-                <span style={{ fontFamily: T.fontBody, fontSize: "14px", fontWeight: "600", color: sel ? T.accent : T.panel }}>{s.split(" ").slice(1).join(" ")}</span>
-                {sel && <div style={{ marginLeft: "auto", color: T.accent, fontSize: "16px" }}>✓</div>}
+      {/* how it works cards */}
+      <div style={{ padding:"40px 24px 0", display:"flex", flexDirection:"column", gap:"12px", flex:1 }}>
+        {HOW_IT_WORKS.map((h, i) => (
+          <div key={i} style={{
+            background:"rgba(255,255,255,0.06)",
+            border:"1px solid rgba(255,255,255,0.1)",
+            borderRadius:"18px", padding:"18px 20px",
+            display:"flex", alignItems:"center", gap:"16px",
+            animation:`fadeUp 0.4s ${i * 0.1 + 0.2}s ease both`,
+          }}>
+            <div style={{
+              width:"50px", height:"50px", borderRadius:"14px",
+              background:"rgba(16,185,129,0.15)",
+              border:"1px solid rgba(16,185,129,0.3)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:"24px", flexShrink:0,
+            }}>{h.emoji}</div>
+            <div>
+              <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"20px", color:WHITE, letterSpacing:"0.04em" }}>
+                {h.title}
               </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Error */}
-      {error && (
-        <div style={{ background: T.redLight, border: `1px solid ${T.redBorder}`, borderRadius: T.r12, padding: "10px 14px", fontFamily: T.fontBody, fontSize: "13px", color: T.red, marginTop: "16px" }}>{error}</div>
-      )}
+              <div style={{ fontFamily:"system-ui", fontSize:"13px", color:"rgba(255,255,255,0.5)", marginTop:"3px", lineHeight:"1.5" }}>
+                {h.desc}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* CTA */}
-      <div style={{ marginTop: "auto", paddingTop: "24px" }}>
-        {step !== 1 && (
-          <button onClick={next} disabled={loading}
-            style={{ width: "100%", background: T.panel, border: "none", borderRadius: T.r16, padding: "16px", fontFamily: T.fontDisplay, fontSize: "22px", letterSpacing: "0.05em", color: T.accent, cursor: "pointer", boxShadow: T.shadowMd, opacity: loading ? 0.5 : 1 }}>
-            {loading ? (
-              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
-                <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${T.accentLight}`, borderTop: `2px solid ${T.accent}`, animation: "spin 0.8s linear infinite" }} />
-                Saving...
-              </span>
-            ) : step < STEPS.length - 1 ? "Continue →" : "Start Sweating 🔥"}
-          </button>
+      <div style={{ padding:"32px 24px 0" }}>
+        <button onClick={() => setStep(1)} style={{
+          width:"100%", padding:"18px",
+          background:ACCENT, border:"none", borderRadius:"18px",
+          fontFamily:"'Bebas Neue',sans-serif", fontSize:"24px",
+          letterSpacing:"0.06em", color:CHALK,
+          cursor:"pointer",
+        }}>
+          LET'S GO ⚔️
+        </button>
+        <div style={{
+          fontFamily:"system-ui", fontSize:"12px",
+          color:"rgba(255,255,255,0.3)", textAlign:"center", marginTop:"12px",
+        }}>
+          Free forever · No money involved
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes fadeUp {
+          from { opacity:0; transform:translateY(16px); }
+          to   { opacity:1; transform:translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+
+  // ── SCREEN 1: Profile setup ───────────────────────────────────────────────
+  if (step === 1) return (
+    <div style={{ minHeight:"100vh", background:MINT, paddingBottom:"40px" }}>
+
+      {/* header */}
+      <div style={{ background:CHALK, padding:"52px 24px 24px" }}>
+        <div style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"32px", color:WHITE, letterSpacing:"0.04em" }}>
+          Set up your profile
+        </div>
+        <div style={{ fontFamily:"system-ui", fontSize:"14px", color:"rgba(255,255,255,0.5)", marginTop:"4px" }}>
+          Step 2 of 3 — almost there
+        </div>
+        {/* progress */}
+        <div style={{ height:"3px", background:"rgba(255,255,255,0.1)", borderRadius:"2px", marginTop:"16px" }}>
+          <div style={{ width:"66%", height:"100%", background:ACCENT, borderRadius:"2px" }}/>
+        </div>
+      </div>
+
+      <div style={{ padding:"24px 20px", display:"flex", flexDirection:"column", gap:"20px" }}>
+
+        {/* username */}
+        <div style={{ background:WHITE, borderRadius:"18px", padding:"20px", border:`1px solid ${BORDER}` }}>
+          <div style={{ fontFamily:"monospace", fontSize:"11px", color:MUTED, letterSpacing:"0.1em", marginBottom:"10px" }}>
+            CHOOSE YOUR USERNAME
+          </div>
+          <div style={{ position:"relative" }}>
+            <span style={{
+              position:"absolute", left:"14px", top:"50%", transform:"translateY(-50%)",
+              fontFamily:"monospace", fontSize:"16px", color:MUTED,
+            }}>@</span>
+            <input
+              value={username}
+              onChange={e => handleUsernameChange(e.target.value)}
+              placeholder="coolname123"
+              maxLength={20}
+              style={{
+                width:"100%", padding:"14px 14px 14px 32px",
+                background:MINT, border:`1.5px solid ${
+                  usernameOk === true ? ACCENT :
+                  usernameOk === false ? "#ef4444" : BORDER
+                }`,
+                borderRadius:"12px", fontFamily:"monospace",
+                fontSize:"16px", color:CHALK, outline:"none",
+                boxSizing:"border-box",
+              }}
+            />
+            {usernameOk === true && (
+              <span style={{ position:"absolute", right:"12px", top:"50%", transform:"translateY(-50%)", color:ACCENT, fontSize:"18px" }}>✓</span>
+            )}
+            {usernameOk === false && (
+              <span style={{ position:"absolute", right:"12px", top:"50%", transform:"translateY(-50%)", color:"#ef4444", fontSize:"18px" }}>✗</span>
+            )}
+          </div>
+          <div style={{ fontFamily:"system-ui", fontSize:"12px", color:MUTED, marginTop:"6px" }}>
+            Letters, numbers and underscores only. This is your public handle.
+          </div>
+        </div>
+
+        {/* sport selection */}
+        <div style={{ background:WHITE, borderRadius:"18px", padding:"20px", border:`1px solid ${BORDER}` }}>
+          <div style={{ fontFamily:"monospace", fontSize:"11px", color:MUTED, letterSpacing:"0.1em", marginBottom:"14px" }}>
+            WHAT DO YOU BET ON? (pick any)
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"8px" }}>
+            {SPORTS.map(s => {
+              const sel = selectedSports.includes(s.id);
+              return (
+                <button key={s.id} type="button" onClick={() => toggleSport(s.id)} style={{
+                  display:"flex", alignItems:"center", gap:"10px",
+                  padding:"12px 14px",
+                  background: sel ? CHALK : MINT,
+                  border:`1.5px solid ${sel ? CHALK : BORDER}`,
+                  borderRadius:"12px", cursor:"pointer",
+                  transition:"all 0.15s",
+                }}>
+                  <span style={{ fontSize:"18px" }}>{s.icon}</span>
+                  <span style={{
+                    fontFamily:"monospace", fontSize:"13px", fontWeight:"600",
+                    color: sel ? ACCENT : CHALK,
+                  }}>{s.name}</span>
+                  {sel && <span style={{ marginLeft:"auto", color:ACCENT, fontSize:"14px" }}>✓</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {error && (
+          <div style={{
+            background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.3)",
+            borderRadius:"12px", padding:"12px 16px",
+            fontFamily:"system-ui", fontSize:"13px", color:"#ef4444",
+          }}>{error}</div>
         )}
-        {step === 1 && !preview && (
-          <button onClick={next} disabled={loading}
-            style={{ width: "100%", background: T.panel, border: "none", borderRadius: T.r16, padding: "16px", fontFamily: T.fontDisplay, fontSize: "22px", letterSpacing: "0.05em", color: T.accent, cursor: "pointer", boxShadow: T.shadowMd }}>
-            Continue →
-          </button>
-        )}
-        {step === 1 && preview && (
-          <button onClick={next} disabled={loading}
-            style={{ width: "100%", background: T.panel, border: "none", borderRadius: T.r16, padding: "16px", fontFamily: T.fontDisplay, fontSize: "22px", letterSpacing: "0.05em", color: T.accent, cursor: "pointer", boxShadow: T.shadowMd, opacity: loading ? 0.5 : 1 }}>
-            {loading ? (
-              <span style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
-                <div style={{ width: "20px", height: "20px", borderRadius: "50%", border: `2px solid ${T.accentLight}`, borderTop: `2px solid ${T.accent}`, animation: "spin 0.8s linear infinite" }} />
-                Uploading...
-              </span>
-            ) : "Continue →"}
-          </button>
-        )}
+
+        <button onClick={handleFinish} disabled={saving || !username || username.length < 3}
+          style={{
+            width:"100%", padding:"18px",
+            background: (saving || !username || username.length < 3) ? "#e5e7eb" : CHALK,
+            border:"none", borderRadius:"18px",
+            fontFamily:"'Bebas Neue',sans-serif", fontSize:"22px",
+            letterSpacing:"0.06em",
+            color: (saving || !username || username.length < 3) ? MUTED : ACCENT,
+            cursor: (saving || !username || username.length < 3) ? "not-allowed" : "pointer",
+            transition:"all 0.2s",
+          }}>
+          {saving ? "SAVING…" : "LET'S BET ⚔️"}
+        </button>
       </div>
     </div>
   );
+
+  return null;
 }

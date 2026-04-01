@@ -616,12 +616,12 @@ export default function ProfileOverlay({ user }){
         {/* ── QUICK ACTIONS ── */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",margin:"0 16px 12px"}}>
           {[
-            {emoji:"👤",label:"View Profile",  action:()=>goTo(`/profile/${user?.uid}`)},
-            {emoji:"✏️",label:"Edit Profile",  action:()=>goTo("/edit-profile")},
-            {emoji:"⚔️",label:"New Bet",       action:()=>goTo("/create")},
-            {emoji:"👥",label:"Group Bets",    action:()=>goTo("/group-bets")},
-            {emoji:"📤",label:"Share My Card", action:()=>goTo("/sweat-card")},
-            {emoji:"🏆",label:"Leaderboard",   action:()=>goTo("/leaderboard")},
+            {emoji:"👤", label:"View Profile",  action:()=>goTo(`/profile/${user?.uid}`)},
+            {emoji:"✏️", label:"Edit Profile",  action:()=>goTo("/edit-profile")},
+            {emoji:"⚔️", label:"New Bet",       action:()=>goTo("/create")},
+            {emoji:"👥", label:"Group Bets",    action:()=>goTo("/group-bets")},
+            {emoji:"🃏", label:"Share My Card", action:()=>goTo("/sweat-card")},
+            {emoji:"🏆", label:"Leaderboard",   action:()=>goTo("/leaderboard")},
           ].map(a=>(
             <button key={a.label} onClick={a.action} style={{
               background:WHITE,border:`1px solid ${ACCENT}30`,borderRadius:"14px",

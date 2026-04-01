@@ -21,7 +21,7 @@ export default function PWAInstallPrompt() {
 
     // TEMP: clear dismissed flag so it always shows during testing
     // Remove this line when you go to production
-    localStorage.removeItem('pwa-dismissed');
+    // localStorage.removeItem('pwa-dismissed');
 
     const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
     setIsIOS(ios);

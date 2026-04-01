@@ -157,7 +157,43 @@ export default function CreateBet({ user }) {
         );
       }
 
-      // ✅ navigate to "/" (Bets page) — not "/bets" which doesn't exist
+      // ✅ Show share options with the challenge link
+      const challengeLink = `https://sweatdebt.vercel.app/challenge/${betDoc.id}`;
+      const whatsappMsg   = `⚔️ ${user.displayName} challenged you on SweatDebt!\n\nLoser does: ${reps} ${forfeit}\nSport: ${sport}\n\nAccept the challenge: ${challengeLink}`;
+
+      const shared = await new Promise(resolve => {
+        const sheet = document.createElement("div");
+        sheet.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:flex-end;justify-content:center;`;
+        sheet.innerHTML = `
+          <div style="background:#fff;width:100%;max-width:480px;border-radius:24px 24px 0 0;padding:24px;box-sizing:border-box;">
+            <div style="width:40px;height:4px;background:#e5e7eb;border-radius:2px;margin:0 auto 20px;"></div>
+            <div style="font-family:monospace;font-size:18px;font-weight:700;color:#2C4A3E;margin-bottom:6px;">Challenge Sent! ⚔️</div>
+            <div style="font-family:system-ui;font-size:13px;color:#6b7280;margin-bottom:20px;">Share the link so they can accept:</div>
+            <div style="background:#f0fdf4;border:1px solid #d1fae5;border-radius:10px;padding:10px 14px;font-family:monospace;font-size:11px;color:#2C4A3E;margin-bottom:16px;word-break:break-all;">${challengeLink}</div>
+            <div style="display:flex;gap:10px;">
+              <button id="wa-btn" style="flex:1;padding:14px;background:#25D366;border:none;border-radius:12px;font-family:monospace;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">📱 WhatsApp</button>
+              <button id="copy-btn" style="flex:1;padding:14px;background:#2C4A3E;border:none;border-radius:12px;font-family:monospace;font-size:14px;font-weight:700;color:#10b981;cursor:pointer;">📋 Copy Link</button>
+            </div>
+            <button id="done-btn" style="width:100%;margin-top:10px;padding:13px;background:#f3f4f6;border:none;border-radius:12px;font-family:system-ui;font-size:14px;color:#6b7280;cursor:pointer;">Done</button>
+          </div>`;
+        document.body.appendChild(sheet);
+
+        sheet.querySelector("#wa-btn").onclick = () => {
+          window.open(`https://wa.me/?text=${encodeURIComponent(whatsappMsg)}`);
+        };
+        sheet.querySelector("#copy-btn").onclick = () => {
+          navigator.clipboard?.writeText(challengeLink);
+          sheet.querySelector("#copy-btn").textContent = "✓ Copied!";
+        };
+        sheet.querySelector("#done-btn").onclick = () => {
+          document.body.removeChild(sheet);
+          resolve(true);
+        };
+        sheet.onclick = (e) => {
+          if (e.target === sheet) { document.body.removeChild(sheet); resolve(true); }
+        };
+      });
+
       navigate("/");
 
     } catch(e) {
