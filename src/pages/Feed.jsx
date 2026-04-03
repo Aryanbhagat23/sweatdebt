@@ -413,7 +413,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
       <div style={{ position:"absolute", right:"10px", top:"50%", transform:"translateY(-50%)", display:"flex", flexDirection:"column", alignItems:"center", gap:"12px", zIndex:10 }}>
         <SideBtn icon={liked ? "❤️" : "🤍"} count={likes}        label="Like"    onClick={handleLike} />
         <SideBtn icon="💬"                   count={commentCount} label="Comment" onClick={onCommentOpen} />
-        <SideBtn icon="↗"                    count={null}         label="Share"   onClick={handleShare} />
+        <SideBtn icon="↗️"                   count={null}         label="Share"   onClick={handleShare} />
         <SideBtn icon="⚔️"                   count={null}         label="Bet"     onClick={() => onNavigate("/create")} />
         {isOwner && (
           <SideBtn icon="🗑️" count={null} label="Delete" onClick={() => setShowDelete(true)} />

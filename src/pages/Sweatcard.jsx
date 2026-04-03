@@ -301,27 +301,37 @@ export default function SweatCard({ user }) {
 
         {/* Honour bar */}
         <div style={{ padding:"16px 24px", borderBottom:`1px solid ${T.border}` }}>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px" }}>
-            <span style={{ fontFamily:"monospace", fontSize:"10px", color:T.muted, letterSpacing:"0.1em" }}>HONOUR SCORE</span>
-            <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"16px", color:T.accent }}>
-              {profile.honourScore || 0} / {TIERS.find(t => (profile.honourScore||0) < t.min)?.min || 1500}
-            </span>
-          </div>
-          <div style={{ height:"6px", background:T.stat, borderRadius:"3px", overflow:"hidden" }}>
-            <div style={{
-              height:"100%",
-              width:`${Math.min(((profile.honourScore||0) / (TIERS.find(t => (profile.honourScore||0) < t.min)?.min || 1500)) * 100, 100)}%`,
-              background:`linear-gradient(90deg, ${T.accent}, #34d399)`,
-              borderRadius:"3px",
-              transition:"width 1s ease",
-            }}/>
-          </div>
-          <div style={{ display:"flex", justifyContent:"space-between", marginTop:"6px" }}>
-            <span style={{ fontFamily:"monospace", fontSize:"9px", color:T.muted }}>{tier.label}</span>
-            <span style={{ fontFamily:"monospace", fontSize:"9px", color:T.muted }}>
-              {TIERS.find(t => (profile.honourScore||0) < t.min)?.label || "MAX"}
-            </span>
-          </div>
+          {(() => {
+            const score    = profile.honourScore || 0;
+            const curTier  = getTier(score);
+            const nextTier = TIERS.find(t => t.min > score);
+            const fromMin  = curTier.min;
+            const toMin    = nextTier?.min || (curTier.min + 500);
+            const progress = Math.min(((score - fromMin) / (toMin - fromMin)) * 100, 100);
+            return (
+              <>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"8px" }}>
+                  <span style={{ fontFamily:"monospace", fontSize:"10px", color:T.muted, letterSpacing:"0.1em" }}>HONOUR SCORE</span>
+                  <span style={{ fontFamily:"'Bebas Neue',sans-serif", fontSize:"16px", color:T.accent }}>
+                    {score} pts
+                  </span>
+                </div>
+                <div style={{ height:"6px", background:T.stat, borderRadius:"3px", overflow:"hidden" }}>
+                  <div style={{
+                    height:"100%", width:`${progress}%`,
+                    background:`linear-gradient(90deg, ${T.accent}, #34d399)`,
+                    borderRadius:"3px", transition:"width 1s ease",
+                  }}/>
+                </div>
+                <div style={{ display:"flex", justifyContent:"space-between", marginTop:"6px" }}>
+                  <span style={{ fontFamily:"monospace", fontSize:"9px", color:T.muted }}>{curTier.emoji} {curTier.label}</span>
+                  <span style={{ fontFamily:"monospace", fontSize:"9px", color:T.muted }}>
+                    {nextTier ? `${nextTier.min - score} pts to ${nextTier.emoji} ${nextTier.label}` : "MAX TIER 👑"}
+                  </span>
+                </div>
+              </>
+            );
+          })()}
         </div>
 
         {/* Recent bets */}
@@ -404,22 +414,37 @@ export default function SweatCard({ user }) {
         </div>
       </div>
 
-      {/* Instructions below card */}
       <div style={{
         maxWidth:"400px", width:"100%", padding:"0 16px 48px",
         textAlign:"center",
       }}>
         <div style={{
-          background:"rgba(16,185,129,0.08)", border:"1px solid rgba(16,185,129,0.2)",
+          background: theme==="dark" ? "rgba(16,185,129,0.1)" : "rgba(16,185,129,0.08)",
+          border:"1px solid rgba(16,185,129,0.2)",
           borderRadius:"14px", padding:"16px",
         }}>
           <div style={{ fontFamily:"monospace", fontSize:"11px", color:"#10b981", letterSpacing:"0.08em", marginBottom:"8px" }}>
             📸 HOW TO SHARE
           </div>
-          <p style={{ fontFamily:"system-ui", fontSize:"13px", color:"rgb(0, 46, 3)", lineHeight:"1.6", margin:0 }}>
+          <p style={{ fontFamily:"system-ui", fontSize:"13px", color: theme==="dark" ? "rgba(255,255,255,0.7)" : "rgba(55,65,81,0.8)", lineHeight:"1.6", margin:0 }}>
             Take a screenshot of the card above.<br/>
             Share it to your Instagram story, WhatsApp status, or anywhere you want to flex your record.
           </p>
+          <button onClick={() => {
+            if (navigator.share) {
+              navigator.share({ title:"My SweatDebt Stats", text:`Check my SweatDebt profile! ${stats.wins}W ${stats.losses}L — ${winRate}% win rate 🔥`, url:"https://sweatdebt.vercel.app" });
+            } else {
+              navigator.clipboard?.writeText("https://sweatdebt.vercel.app");
+              alert("Link copied! Share it anywhere 🔥");
+            }
+          }} style={{
+            marginTop:"12px", width:"100%", padding:"11px",
+            background:"#10b981", border:"none", borderRadius:"10px",
+            fontFamily:"monospace", fontSize:"13px", fontWeight:"700",
+            color:"#052e16", cursor:"pointer", letterSpacing:"0.06em",
+          }}>
+            📤 SHARE NOW
+          </button>
         </div>
       </div>
     </div>

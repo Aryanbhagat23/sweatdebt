@@ -125,8 +125,22 @@ export default function Bets({ user }) {
   const [notifOpen,  setNotifOpen] = useState(false);
   const [debts,      setDebts]     = useState([]);
   const [debtOpen,   setDebtOpen]  = useState(false);
+  const [groupInvites, setGroupInvites] = useState([]);
 
   useEffect(() => { if (user) pruneNotifs(user.uid); }, [user]);
+
+  // Load group bet invites
+  useEffect(() => {
+    if (!user) return;
+    const q = query(collection(db,"group_bets"), where("invitedUids","array-contains",user.uid));
+    const unsub = onSnapshot(q, snap => {
+      const invites = snap.docs
+        .map(d => ({id:d.id,...d.data()}))
+        .filter(g => g.members?.find(m => m.uid === user.uid)?.status === "invited");
+      setGroupInvites(invites);
+    }, () => {});
+    return () => unsub();
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -302,15 +316,33 @@ export default function Bets({ user }) {
 
       <div style={{ height:"1px", background:T.border, margin:"8px 16px 16px" }}/>
 
+      {/* Group bet invite banner */}
+      {groupInvites.length > 0 && (
+        <div style={{ margin:"0 16px 8px", background:"rgba(139,92,246,0.1)", border:"1.5px solid #8b5cf6", borderRadius:T.r16, padding:"14px 16px", display:"flex", alignItems:"center", gap:"10px" }}
+          onClick={() => navigate("/group-bets")}>
+          <span style={{ fontSize:"20px" }}>👥</span>
+          <div style={{ fontFamily:T.fontBody, fontSize:"15px", fontWeight:"700", color:T.panel }}>
+            {groupInvites.length} group bet invite{groupInvites.length>1?"s":""}!
+          </div>
+          <button type="button" onClick={e => { e.stopPropagation(); navigate("/group-bets"); }}
+            style={{ marginLeft:"auto", background:"#8b5cf6", border:"none", borderRadius:"20px", padding:"6px 14px", fontFamily:T.fontMono, fontSize:"11px", fontWeight:"700", color:"#fff", cursor:"pointer" }}>
+            VIEW →
+          </button>
+        </div>
+      )}
+
       {/* Pending challenges banner */}
-      {pending.length>0 && (
-        <div style={{ margin:"0 16px 12px", background:T.accentLight, border:`1.5px solid ${T.accent}`, borderRadius:T.r16, padding:"14px 16px", display:"flex", alignItems:"center", gap:"10px", cursor:"pointer" }}
-          onClick={() => setTab("challenges")}>
+      {pending.length > 0 && (
+        <div style={{ margin:"0 16px 12px", background:T.accentLight, border:`1.5px solid ${T.accent}`, borderRadius:T.r16, padding:"14px 16px", display:"flex", alignItems:"center", gap:"10px" }}>
           <span style={{ fontSize:"20px" }}>⚔️</span>
           <div style={{ fontFamily:T.fontBody, fontSize:"15px", fontWeight:"700", color:T.panel }}>
             {pending.length} friend{pending.length>1?"s":""} challenged you!
           </div>
-          <div style={{ marginLeft:"auto", fontFamily:T.fontMono, fontSize:"11px", color:T.textMuted }}>TAP →</div>
+          <button type="button"
+            onClick={() => setTab("challenges")}
+            style={{ marginLeft:"auto", background:T.accent, border:"none", borderRadius:"20px", padding:"6px 14px", fontFamily:T.fontMono, fontSize:"11px", fontWeight:"700", color:"#fff", cursor:"pointer" }}>
+            TAP →
+          </button>
         </div>
       )}
 

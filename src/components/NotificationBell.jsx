@@ -8,43 +8,54 @@ export default function NotificationBell({ user, onClick, light = false }) {
 
   useEffect(() => {
     if (!user) return;
+    // ✅ Single-field query only — compound query (toUserId + read==false)
+    // requires a Firestore composite index which causes silent failures.
+    // Filter client-side instead.
     const q = query(
       collection(db, "notifications"),
-      where("toUserId", "==", user.uid),
-      where("read", "==", false)
+      where("toUserId", "==", user.uid)
     );
-    const unsub = onSnapshot(q, snap => setUnread(snap.size));
+    const unsub = onSnapshot(q, snap => {
+      const count = snap.docs.filter(d => d.data().read === false).length;
+      setUnread(count);
+    }, err => {
+      console.warn("NotificationBell error:", err);
+    });
     return () => unsub();
   }, [user]);
 
-  const iconColor  = light ? "rgba(255,255,255,0.9)" : T.panel;
-  const bgColor    = light ? "rgba(255,255,255,0.15)" : T.bg1;
-  const borderColor = light ? "rgba(255,255,255,0.2)" : T.borderCard;
+  const iconColor   = light ? "rgba(255,255,255,0.9)"  : T.panel;
+  const bgColor     = light ? "rgba(255,255,255,0.15)" : T.bg1;
+  const borderColor = light ? "rgba(255,255,255,0.2)"  : T.borderCard;
 
   return (
-    <div onClick={onClick} style={{
-      position:"relative",
-      width:"36px", height:"36px",
-      borderRadius:"50%",
-      background: bgColor,
-      border: `1px solid ${borderColor}`,
-      backdropFilter: light ? "blur(8px)" : "none",
-      WebkitBackdropFilter: light ? "blur(8px)" : "none",
-      display:"flex", alignItems:"center", justifyContent:"center",
-      cursor:"pointer",
-      transition:"transform 0.2s",
-    }}>
-      <span style={{ fontSize:"16px", color: iconColor }}>🔔</span>
+    <div
+      onClick={onClick}
+      style={{
+        position: "relative",
+        width: "36px", height: "36px",
+        borderRadius: "50%",
+        background: bgColor,
+        border: `1px solid ${borderColor}`,
+        backdropFilter: light ? "blur(8px)" : "none",
+        WebkitBackdropFilter: light ? "blur(8px)" : "none",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        cursor: "pointer",
+        transition: "transform 0.2s",
+      }}
+    >
+      <span style={{ fontSize: "16px", color: iconColor }}>🔔</span>
+
       {unread > 0 && (
         <div style={{
-          position:"absolute", top:"-2px", right:"-2px",
-          width:"16px", height:"16px",
-          borderRadius:"50%",
-          background:"#ef4444",
+          position: "absolute", top: "-2px", right: "-2px",
+          width: "16px", height: "16px",
+          borderRadius: "50%",
+          background: "#ef4444",
           border: light ? "2px solid transparent" : `2px solid ${T.bg0}`,
-          display:"flex", alignItems:"center", justifyContent:"center",
-          fontSize:"9px", fontWeight:"700", color:"#fff",
-          fontFamily:T.fontMono,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontSize: "9px", fontWeight: "700", color: "#fff",
+          fontFamily: T.fontMono,
         }}>
           {unread > 9 ? "9+" : unread}
         </div>

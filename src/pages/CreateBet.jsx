@@ -41,10 +41,11 @@ const C = {
 export default function CreateBet({ user }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const prefilledUid = searchParams.get("opponent");
+  const prefilledUid   = searchParams.get("opponent");
+  const prefilledSport = searchParams.get("sport");
 
-  const [step,           setStep]           = useState(1);
-  const [sport,          setSport]          = useState(null);
+  const [step,           setStep]           = useState(prefilledSport ? 2 : 1); // skip sport step if prefilled
+  const [sport,          setSport]          = useState(prefilledSport || null);
   const [forfeit,        setForfeit]        = useState(null);
   const [reps,           setReps]           = useState("");
   const [description,    setDescription]    = useState("");
@@ -89,7 +90,7 @@ export default function CreateBet({ user }) {
       }, { merge: true });
 
       const forfeitLabel = forfeit === "custom" ? reps : `${reps} ${forfeit}`;
-      const msgText = `⚔️ I just challenged you to a bet!\n\n🏅 Sport: ${sport || "Any"}\n💀 Forfeit if you lose: ${forfeitLabel}\n🕐 Deadline: ${DEADLINES.find(d=>d.value===deadline)?.label}\n\nAccept or decline on the Challenges tab. Good luck! 😤`;
+      const msgText = `⚔️ SWEATDEBT CHALLENGE\n\n${user.displayName || "Someone"} challenged you!\n\n🏅 Sport: ${sport || "Any"}\n💀 Forfeit if you lose: ${forfeitLabel}\n⏰ Deadline: ${DEADLINES.find(d=>d.value===deadline)?.label}\n\n👆 Accept or decline on the Challenges tab.\n\nGood luck! 😤`;
 
       await addDoc(collection(db, "conversations", convoId, "messages"), {
         senderId:    user.uid,
@@ -220,7 +221,7 @@ export default function CreateBet({ user }) {
       <div style={{ display:"flex", alignItems:"center", gap:"12px", padding:"52px 16px 20px" }}>
         <button
           type="button"
-          onClick={() => step > 1 ? setStep(s => s - 1) : navigate("/")}
+          onClick={() => step > 1 ? setStep(s => prefilledSport && s === 2 ? (navigate("/"), 1) : s - 1) : navigate("/")}
           style={{
             width:"44px", height:"44px", borderRadius:"50%",
             background:C.card, border:`1px solid ${C.border}`,
