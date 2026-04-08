@@ -163,6 +163,9 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
   const vidRef  = useRef(null);
   const pageRef = useRef(null);
 
+  // ✅ Detect daily challenge videos — these skip all approve/dispute logic
+  const isDailyChallenge = video.type === "daily_challenge";
+
   useEffect(() => {
     setApproved(video.approved || false);
     setDisputed(video.disputed || false);
@@ -203,7 +206,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
     setApproving(true);
     try {
       await updateDoc(doc(db,"videos",video.id), { approved:true, disputed:false });
-      if (video.betId && video.betId !== "general")
+      if (video.betId && video.betId !== "general" && video.betId !== null)
         await updateDoc(doc(db,"bets",video.betId), { status:"lost" });
       setApproved(true);
     } catch(e){}
@@ -241,10 +244,9 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
         juryStatus:   jurorList.length > 0 ? "pending" : "no_jury",
         juryDeadline,
       });
-      if (video.betId && video.betId !== "general")
+      if (video.betId && video.betId !== "general" && video.betId !== null)
         await updateDoc(doc(db,"bets",video.betId), { status:"jury" });
 
-      // ✅ Notify every juror so they know to go vote
       await Promise.all(jurorList.map(j =>
         addDoc(collection(db, "notifications"), {
           toUserId:   j.uid,
@@ -256,7 +258,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
           message:    `⚖️ You've been selected as a juror! Watch the forfeit video and vote LEGIT or FAKE. You have 48 hours.`,
           read:       false,
           createdAt:  serverTimestamp(),
-        }).catch(() => {}) // non-critical
+        }).catch(() => {})
       ));
 
       setDisputed(true);
@@ -282,7 +284,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
         updates.approved   = true;
         updates.disputed   = false;
         updates.juryStatus = "approved";
-        if (video.betId && video.betId !== "general")
+        if (video.betId && video.betId !== "general" && video.betId !== null)
           await updateDoc(doc(db,"bets",video.betId), { status:"lost" });
         try {
           const uploaderRef  = doc(db,"users",video.uploadedBy);
@@ -303,7 +305,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
       } else if (rejectCount >= majority) {
         updates.juryStatus = "rejected";
         updates.approved   = false;
-        if (video.betId && video.betId !== "general")
+        if (video.betId && video.betId !== "general" && video.betId !== null)
           await updateDoc(doc(db,"bets",video.betId), { status:"disputed" });
         try {
           const uploaderRef  = doc(db,"users",video.uploadedBy);
@@ -349,24 +351,21 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
   // ── WHO SEES WHAT ────────────────────────────────────────────────────────────
   const isOwner = video.uploadedBy === currentUser?.uid;
 
-  // The OPPONENT is whoever did NOT upload the video but is part of the bet.
-  // They could be identified by opponentEmail, opponentUid, betCreatedBy, or createdByEmail.
   const isOpponent =
     !isOwner && (
-      video.opponentUid      === currentUser?.uid  ||
-      video.betCreatedBy     === currentUser?.uid  ||
-      video.opponentEmail    === currentUser?.email ||
-      video.createdByEmail   === currentUser?.email
+      video.opponentUid    === currentUser?.uid  ||
+      video.betCreatedBy   === currentUser?.uid  ||
+      video.opponentEmail  === currentUser?.email ||
+      video.createdByEmail === currentUser?.email
     );
 
-  // Only the opponent can approve or dispute — never the uploader themselves
-  const canVerdict = isOpponent && !approved && !disputed && !juryStatus;
-
-  // Uploader sees a "waiting" message instead
-  const isWaitingForOpponent = isOwner && !approved && !disputed && !juryStatus;
+  // ✅ Daily challenge videos NEVER show approve/dispute — they're auto-approved
+  // Only bet proof videos go through the verdict flow
+  const canVerdict         = !isDailyChallenge && isOpponent && !approved && !disputed && !juryStatus;
+  const isWaitingForOpponent = !isDailyChallenge && isOwner && !approved && !disputed && !juryStatus;
 
   const myJurorEntry = jurors.find(j => j.uid === currentUser?.uid);
-  const isJuror      = !!myJurorEntry && myJurorEntry.vote === null && juryStatus === "pending";
+  const isJuror      = !isDailyChallenge && !!myJurorEntry && myJurorEntry.vote === null && juryStatus === "pending";
   const votesIn      = jurors.filter(j => j.vote !== null).length;
   const totalJurors  = jurors.length;
   // ─────────────────────────────────────────────────────────────────────────────
@@ -402,11 +401,26 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
 
       {/* STATUS BADGE */}
       <div style={{ position:"absolute", top:"72px", left:"14px", zIndex:10, display:"flex", gap:"6px" }}>
-        {approved && juryStatus !== "pending" && <Bdg bg="rgba(16,185,129,0.9)"  color="#052e16" text="APPROVED ✓" />}
-        {juryStatus === "approved"             && <Bdg bg="rgba(16,185,129,0.9)"  color="#052e16" text="JURY ✓ HONEST" />}
-        {juryStatus === "rejected"             && <Bdg bg="rgba(239,68,68,0.9)"   color="#fff"    text="JURY ✗ FAKE" />}
-        {juryStatus === "pending"              && <Bdg bg="rgba(245,166,35,0.9)"  color="#052e16" text={`⚖️ JURY ${votesIn}/${totalJurors}`} />}
-        {!approved && !disputed && !juryStatus && <Bdg bg="rgba(5,46,22,0.8)"    color="#10b981" text="FORFEIT 💀" />}
+        {/* ✅ Daily challenge gets its own badge */}
+        {isDailyChallenge && (
+          <Bdg bg="rgba(16,185,129,0.9)" color="#052e16" text="⚡ DAILY CHALLENGE" />
+        )}
+        {/* Bet proof badges — only shown for non-daily videos */}
+        {!isDailyChallenge && approved && juryStatus !== "pending" && (
+          <Bdg bg="rgba(16,185,129,0.9)"  color="#052e16" text="APPROVED ✓" />
+        )}
+        {!isDailyChallenge && juryStatus === "approved" && (
+          <Bdg bg="rgba(16,185,129,0.9)"  color="#052e16" text="JURY ✓ HONEST" />
+        )}
+        {!isDailyChallenge && juryStatus === "rejected" && (
+          <Bdg bg="rgba(239,68,68,0.9)"   color="#fff"    text="JURY ✗ FAKE" />
+        )}
+        {!isDailyChallenge && juryStatus === "pending" && (
+          <Bdg bg="rgba(245,166,35,0.9)"  color="#052e16" text={`⚖️ JURY ${votesIn}/${totalJurors}`} />
+        )}
+        {!isDailyChallenge && !approved && !disputed && !juryStatus && (
+          <Bdg bg="rgba(5,46,22,0.8)"     color="#10b981" text="FORFEIT 💀" />
+        )}
       </div>
 
       {/* RIGHT SIDE BUTTONS */}
@@ -481,16 +495,16 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
           </div>
         )}
 
-        {/* ── VERDICT AREA ── */}
+        {/* ── VERDICT AREA — hidden entirely for daily challenge videos ── */}
 
-        {/* Uploader sees "waiting" — NOT approve/dispute */}
+        {/* Uploader waiting */}
         {isWaitingForOpponent && (
           <div style={{ background:"rgba(255,255,255,0.08)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:"10px", padding:"10px 14px", fontFamily:T.fontBody, fontSize:"13px", color:"rgba(255,255,255,0.6)", textAlign:"center" }}>
             ⏳ Waiting for your opponent to review this…
           </div>
         )}
 
-        {/* Opponent sees APPROVE / DISPUTE */}
+        {/* Opponent APPROVE / DISPUTE */}
         {canVerdict && (
           <div style={{ display:"flex", gap:"8px" }}>
             <button type="button" onClick={handleApprove} disabled={approving}
@@ -504,7 +518,7 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
           </div>
         )}
 
-        {/* Juror vote buttons */}
+        {/* Juror vote */}
         {isJuror && (
           <div>
             <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:"rgba(245,166,35,0.9)", letterSpacing:"0.08em", marginBottom:"6px", textAlign:"center" }}>
@@ -527,31 +541,31 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
         )}
 
         {/* Juror already voted */}
-        {myJurorEntry && myJurorEntry.vote !== null && juryStatus === "pending" && (
+        {!isDailyChallenge && myJurorEntry && myJurorEntry.vote !== null && juryStatus === "pending" && (
           <div style={{ background:"rgba(245,166,35,0.15)", border:"1px solid rgba(245,166,35,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#f5a623", textAlign:"center" }}>
             ⚖️ You voted · waiting for {totalJurors - votesIn} more juror{totalJurors - votesIn !== 1 ? "s" : ""}
           </div>
         )}
 
-        {/* Spectator sees jury in progress */}
-        {juryStatus === "pending" && !isJuror && !myJurorEntry?.vote && (
+        {/* Spectator — jury in progress */}
+        {!isDailyChallenge && juryStatus === "pending" && !isJuror && !myJurorEntry?.vote && (
           <div style={{ background:"rgba(245,166,35,0.12)", border:"1px solid rgba(245,166,35,0.3)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#f5a623" }}>
             ⚖️ Disputed — jury voting in progress ({votesIn}/{totalJurors} voted)
           </div>
         )}
 
         {/* Final verdicts */}
-        {approved && juryStatus !== "pending" && (
+        {!isDailyChallenge && approved && juryStatus !== "pending" && (
           <div style={{ background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#10b981" }}>
             ✓ Forfeit approved! 🏆
           </div>
         )}
-        {juryStatus === "approved" && (
+        {!isDailyChallenge && juryStatus === "approved" && (
           <div style={{ background:"rgba(16,185,129,0.15)", border:"1px solid rgba(16,185,129,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#10b981" }}>
             ⚖️ Jury verdict: LEGIT — honour restored ✓
           </div>
         )}
-        {juryStatus === "rejected" && (
+        {!isDailyChallenge && juryStatus === "rejected" && (
           <div style={{ background:"rgba(239,68,68,0.15)", border:"1px solid rgba(239,68,68,0.4)", borderRadius:"10px", padding:"8px 12px", fontFamily:T.fontBody, fontSize:"13px", color:"#ef4444" }}>
             ⚖️ Jury verdict: FAKE — Debt Dodger 💀 (-15 honour)
           </div>

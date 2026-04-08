@@ -3,7 +3,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { db } from "../firebase";
 import {
   collection, addDoc, serverTimestamp,
-  doc, getDoc, updateDoc,
+  doc, getDoc, updateDoc, arrayUnion, increment,
 } from "firebase/firestore";
 
 const C = {
@@ -16,28 +16,42 @@ const C = {
 const CLOUD  = "daf3vs5n6";
 const PRESET = "jrmodcfe";
 
-/* ── send a notification doc ── */
 async function sendNotif({ toUid, fromUid, fromName, type, betId, text }) {
-  if (!toUid || toUid === fromUid) return; // don't notify yourself
+  if (!toUid || toUid === fromUid) return;
   try {
     await addDoc(collection(db, "notifications"), {
-      toUserId:  toUid,
+      toUserId:   toUid,
       fromUserId: fromUid,
       fromName,
-      type,       // "proof_uploaded" | "bet_accepted" | "proof_approved" etc.
+      type,
       betId:     betId || null,
       message:   text,
       read:      false,
       createdAt: serverTimestamp(),
     });
-  } catch(e) { console.warn("Notification failed (non-critical):", e); }
+  } catch(e) { console.warn("Notification failed:", e); }
+}
+
+// Today's key for daily_challenges collection
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
 export default function UploadProof({ user }) {
   const navigate = useNavigate();
-  const { betId }         = useParams();
-  const [searchParams]    = useSearchParams();
-  const paramBetId        = betId || searchParams.get("betId") || "general";
+  const { betId }      = useParams();
+  const [searchParams] = useSearchParams();
+
+  // ── detect daily challenge mode ──────────────────────────────────────────────
+  const isDailyChallenge = searchParams.get("type") === "daily";
+  const dailyExercise    = searchParams.get("challenge") || "";
+  const dailyReps        = searchParams.get("reps")      || "";
+
+  // ── bet id — only relevant when NOT daily ────────────────────────────────────
+  // If there's no betId at all, stay as null (don't fall back to "general"
+  // which would try a Firestore lookup and silently fail)
+  const paramBetId = betId || searchParams.get("betId") || null;
 
   const [bet,         setBet]         = useState(null);
   const [file,        setFile]        = useState(null);
@@ -48,20 +62,19 @@ export default function UploadProof({ user }) {
   const [done,        setDone]        = useState(false);
   const [error,       setError]       = useState("");
 
-  /* load bet info */
+  // ── load bet info (only if we have a real betId) ─────────────────────────────
   useEffect(() => {
-    if (paramBetId && paramBetId !== "general") {
-      getDoc(doc(db, "bets", paramBetId))
-        .then(snap => { if (snap.exists()) setBet({ id:snap.id, ...snap.data() }); })
-        .catch(() => {});
-    }
-  }, [paramBetId]);
+    if (!paramBetId || isDailyChallenge) return;
+    getDoc(doc(db, "bets", paramBetId))
+      .then(snap => { if (snap.exists()) setBet({ id:snap.id, ...snap.data() }); })
+      .catch(() => {});
+  }, [paramBetId, isDailyChallenge]);
 
   const handleFileChange = e => {
     const f = e.target.files?.[0];
     if (!f) return;
     if (!f.type.startsWith("video/")) { setError("Please select a video file."); return; }
-    if (f.size > 100 * 1024 * 1024)  { setError("Video must be under 100 MB."); return; }
+    if (f.size > 100 * 1024 * 1024)  { setError("Video must be under 100 MB.");  return; }
     setFile(f);
     setPreview(URL.createObjectURL(f));
     setError("");
@@ -75,7 +88,7 @@ export default function UploadProof({ user }) {
     setProgress(10);
 
     try {
-      /* ── 1. Upload to Cloudinary ── */
+      // ── 1. Upload to Cloudinary ─────────────────────────────────────────────
       const form = new FormData();
       form.append("file",          file);
       form.append("upload_preset", PRESET);
@@ -90,61 +103,102 @@ export default function UploadProof({ user }) {
       if (!data.secure_url) throw new Error("Cloudinary upload failed");
       setProgress(70);
 
-      /* ── 2. Gather all bet fields needed for Feed canVerdict check ── */
-      const betData = bet || {};
-
-      // Figure out who the opponent is — the person who did NOT upload
-      // They are identified by opponentUid OR createdBy (if uploader is the opponent)
-      const uploaderIsCreator = betData.createdBy === user.uid;
-      const opponentUid = uploaderIsCreator
-        ? (betData.opponentUid || null)          // uploader created the bet → opponent is opponentUid
-        : (betData.createdBy   || null);          // uploader is the opponent → creator needs to approve
-
-      /* ── 3. Save to Firestore videos collection ── */
-      await addDoc(collection(db, "videos"), {
-        videoUrl:        data.secure_url,
-        uploadedBy:      user.uid,
-        uploadedByName:  user.displayName || "",
-        uploaderPhoto:   user.photoURL    || null,
-        betId:           paramBetId,
-        description:     description.trim(),
-
-        // ✅ ALL fields needed for Feed approve/dispute logic
-        opponentUid:     opponentUid,                        // ← KEY FIX: was missing
-        betCreatedBy:    betData.createdBy    || null,
-        opponentEmail:   betData.opponentEmail|| null,
-        createdByEmail:  betData.createdByEmail|| user.email || null,
-
-        createdAt:    serverTimestamp(),
-        likes:        0,
-        comments:     0,
-        approved:     false,
-        disputed:     false,
-        jurors:       [],
-        juryStatus:   null,
-        juryDeadline: null,
-      });
-      setProgress(85);
-
-      /* ── 4. Mark bet as proof_uploaded ── */
-      if (paramBetId && paramBetId !== "general" && bet) {
-        await updateDoc(doc(db, "bets", paramBetId), {
-          proofUploaded: true,
-          proofUploadedAt: serverTimestamp(),
+      if (isDailyChallenge) {
+        // ── DAILY CHALLENGE FLOW ──────────────────────────────────────────────
+        // Save video tagged as daily challenge — no bet, no approve/dispute logic
+        await addDoc(collection(db, "videos"), {
+          videoUrl:       data.secure_url,
+          uploadedBy:     user.uid,
+          uploadedByName: user.displayName || "",
+          uploaderPhoto:  user.photoURL    || null,
+          betId:          null,
+          description:    description.trim() ||
+                          `Daily Challenge: ${dailyReps} ${dailyExercise} 💪`,
+          type:           "daily_challenge",   // ← tagged so Feed skips approve/dispute
+          exercise:       dailyExercise,
+          reps:           dailyReps,
+          // No opponentUid — daily challenges don't need approval
+          opponentUid:    null,
+          betCreatedBy:   null,
+          opponentEmail:  null,
+          createdAt:      serverTimestamp(),
+          likes:          0,
+          comments:       0,
+          approved:       true,   // auto-approved — no opponent to verify
+          disputed:       false,
+          jurors:         [],
+          juryStatus:     null,
+          juryDeadline:   null,
         });
-      }
-      setProgress(95);
+        setProgress(85);
 
-      /* ── 5. Notify the opponent so they know to go approve ── */
-      if (opponentUid) {
-        await sendNotif({
-          toUid:    opponentUid,
-          fromUid:  user.uid,
-          fromName: user.displayName || "Someone",
-          type:     "proof_uploaded",
-          betId:    paramBetId,
-          text:     `${user.displayName || "Your opponent"} uploaded forfeit proof — go approve or dispute it!`,
+        // Also mark the daily challenge as completed + increment honour
+        try {
+          const key = todayKey();
+          await updateDoc(doc(db, "daily_challenges", key), {
+            completedIds:   arrayUnion(user.uid),
+            totalCompleted: increment(1),
+          });
+          await updateDoc(doc(db, "users", user.uid), {
+            honour:                   increment(2),
+            dailyChallengesCompleted: increment(1),
+          });
+        } catch(e) {
+          // Non-critical — don't block the upload if this fails
+          console.warn("Could not update daily challenge completion:", e);
+        }
+
+      } else {
+        // ── NORMAL BET PROOF FLOW ─────────────────────────────────────────────
+        const betData = bet || {};
+        const uploaderIsCreator = betData.createdBy === user.uid;
+        const opponentUid = uploaderIsCreator
+          ? (betData.opponentUid || null)
+          : (betData.createdBy   || null);
+
+        await addDoc(collection(db, "videos"), {
+          videoUrl:        data.secure_url,
+          uploadedBy:      user.uid,
+          uploadedByName:  user.displayName || "",
+          uploaderPhoto:   user.photoURL    || null,
+          betId:           paramBetId || null,
+          description:     description.trim(),
+          type:            "bet_proof",
+          opponentUid,
+          betCreatedBy:    betData.createdBy     || null,
+          opponentEmail:   betData.opponentEmail || null,
+          createdByEmail:  betData.createdByEmail|| user.email || null,
+          createdAt:       serverTimestamp(),
+          likes:           0,
+          comments:        0,
+          approved:        false,
+          disputed:        false,
+          jurors:          [],
+          juryStatus:      null,
+          juryDeadline:    null,
         });
+        setProgress(85);
+
+        // Mark bet as proof uploaded
+        if (paramBetId && bet) {
+          await updateDoc(doc(db, "bets", paramBetId), {
+            proofUploaded:   true,
+            proofUploadedAt: serverTimestamp(),
+          });
+        }
+        setProgress(95);
+
+        // Notify the opponent
+        if (opponentUid) {
+          await sendNotif({
+            toUid:    opponentUid,
+            fromUid:  user.uid,
+            fromName: user.displayName || "Someone",
+            type:     "proof_uploaded",
+            betId:    paramBetId,
+            text:     `${user.displayName || "Your opponent"} uploaded forfeit proof — go approve or dispute it!`,
+          });
+        }
       }
 
       setProgress(100);
@@ -158,6 +212,15 @@ export default function UploadProof({ user }) {
     setUploading(false);
   };
 
+  // ── page title/subtitle depending on mode ────────────────────────────────────
+  const pageTitle    = isDailyChallenge
+    ? `${dailyReps} ${dailyExercise}`
+    : bet
+      ? `${bet.reps || ""} ${bet.forfeit || "Forfeit"}`.trim()
+      : "Post Forfeit Video";
+
+  const pageSubtitle = isDailyChallenge ? "DAILY CHALLENGE PROOF" : "UPLOAD PROOF";
+
   return (
     <div style={{ minHeight:"100vh", background:C.page, paddingBottom:"60px" }}>
       <style>{`@keyframes _sp{to{transform:rotate(360deg)}}`}</style>
@@ -170,9 +233,11 @@ export default function UploadProof({ user }) {
             ←
           </button>
           <div>
-            <div style={{ fontFamily:"monospace", fontSize:"13px", color:C.accentSoft, letterSpacing:"0.1em" }}>UPLOAD PROOF</div>
+            <div style={{ fontFamily:"monospace", fontSize:"13px", color:C.accentSoft, letterSpacing:"0.1em" }}>
+              {pageSubtitle}
+            </div>
             <div style={{ fontSize:"20px", fontWeight:"700", color:"#fff", fontStyle:"italic", letterSpacing:"0.03em" }}>
-              {bet ? `${bet.reps || ""} ${bet.forfeit || "Forfeit"}`.trim() : "Post Forfeit Video"}
+              {pageTitle}
             </div>
           </div>
         </div>
@@ -184,14 +249,56 @@ export default function UploadProof({ user }) {
         {done && (
           <div style={{ background:`${C.accent}15`, border:`1px solid ${C.accent}40`, borderRadius:"16px", padding:"24px", textAlign:"center" }}>
             <div style={{ fontSize:"48px", marginBottom:"8px" }}>🎉</div>
-            <div style={{ fontSize:"18px", fontWeight:"700", color:C.heading }}>Video uploaded!</div>
-            <div style={{ fontSize:"13px", color:C.muted, marginTop:"4px" }}>Your opponent has been notified 🔔</div>
+            <div style={{ fontSize:"18px", fontWeight:"700", color:C.heading }}>
+              {isDailyChallenge ? "Proof posted! +2 honour earned 💪" : "Video uploaded!"}
+            </div>
+            <div style={{ fontSize:"13px", color:C.muted, marginTop:"4px" }}>
+              {isDailyChallenge
+                ? "Your video is live on the feed 🔥"
+                : "Your opponent has been notified 🔔"}
+            </div>
             <div style={{ fontSize:"12px", color:C.muted, marginTop:"4px" }}>Heading to the feed…</div>
           </div>
         )}
 
         {!done && (
           <>
+            {/* Daily challenge info card */}
+            {isDailyChallenge && (
+              <div style={{ background:C.chalkboard, borderRadius:"14px", padding:"14px 16px", display:"flex", gap:"12px", alignItems:"center" }}>
+                <div style={{ fontSize:"28px" }}>⚡</div>
+                <div>
+                  <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.accentSoft, letterSpacing:"0.1em", marginBottom:"2px" }}>
+                    TODAY'S CHALLENGE
+                  </div>
+                  <div style={{ fontSize:"16px", fontWeight:"700", color:"#fff" }}>
+                    {dailyReps} {dailyExercise}
+                  </div>
+                  <div style={{ fontSize:"12px", color:"rgba(255,255,255,0.5)", marginTop:"3px" }}>
+                    Post your video proof to earn +2 honour
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Bet info card (normal flow) */}
+            {!isDailyChallenge && bet && (
+              <div style={{ background:C.chalkboard, borderRadius:"14px", padding:"14px 16px", display:"flex", gap:"12px", alignItems:"center" }}>
+                <div style={{ fontSize:"28px" }}>⚔️</div>
+                <div>
+                  <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.accentSoft, letterSpacing:"0.1em", marginBottom:"2px" }}>
+                    UPLOADING FOR BET
+                  </div>
+                  <div style={{ fontSize:"14px", fontWeight:"600", color:"#fff" }}>
+                    {bet.description || `${bet.reps || ""} ${bet.forfeit || "Forfeit"}`}
+                  </div>
+                  <div style={{ fontSize:"12px", color:"rgba(255,255,255,0.5)", marginTop:"3px" }}>
+                    vs {bet.opponentName || bet.opponentEmail || "opponent"}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Video picker */}
             <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", overflow:"hidden" }}>
               {preview
@@ -200,7 +307,7 @@ export default function UploadProof({ user }) {
                   <label style={{ display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", minHeight:"200px", cursor:"pointer", gap:"12px" }}>
                     <div style={{ fontSize:"48px" }}>🎥</div>
                     <div style={{ fontFamily:"monospace", fontSize:"13px", color:C.muted, letterSpacing:"0.06em" }}>TAP TO SELECT VIDEO</div>
-                    <input type="file" accept="video/*" onChange={handleFileChange} style={{ display:"none" }}/>
+                    <input type="file" accept="video/*" capture="environment" onChange={handleFileChange} style={{ display:"none" }}/>
                   </label>
                 )
               }
@@ -212,7 +319,7 @@ export default function UploadProof({ user }) {
               )}
             </div>
 
-            {/* Description */}
+            {/* Caption */}
             <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"16px" }}>
               <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.muted, letterSpacing:"0.1em", marginBottom:"10px" }}>
                 CAPTION <span style={{ fontWeight:"400" }}>(optional)</span>
@@ -220,7 +327,9 @@ export default function UploadProof({ user }) {
               <textarea
                 value={description}
                 onChange={e => setDescription(e.target.value)}
-                placeholder='e.g. "100 burpees in the rain, as promised 💀"'
+                placeholder={isDailyChallenge
+                  ? `e.g. "Smashed ${dailyReps} ${dailyExercise}, no excuses 💀"`
+                  : 'e.g. "100 burpees in the rain, as promised 💀"'}
                 maxLength={200}
                 rows={3}
                 style={{ width:"100%", background:C.page, border:`1px solid ${C.border}`, borderRadius:"10px", padding:"12px 14px", color:C.heading, fontSize:"14px", fontFamily:"system-ui", outline:"none", resize:"none", lineHeight:"1.5", boxSizing:"border-box" }}
@@ -249,22 +358,6 @@ export default function UploadProof({ user }) {
               </div>
             )}
 
-            {/* Bet info card */}
-            {bet && (
-              <div style={{ background:C.chalkboard, borderRadius:"14px", padding:"14px 16px", display:"flex", gap:"12px", alignItems:"center" }}>
-                <div style={{ fontSize:"28px" }}>⚔️</div>
-                <div>
-                  <div style={{ fontFamily:"monospace", fontSize:"10px", color:C.accentSoft, letterSpacing:"0.1em", marginBottom:"2px" }}>UPLOADING FOR BET</div>
-                  <div style={{ fontSize:"14px", fontWeight:"600", color:"#fff" }}>
-                    {bet.description || `${bet.reps || ""} ${bet.forfeit || "Forfeit"}`}
-                  </div>
-                  <div style={{ fontSize:"12px", color:"rgba(255,255,255,0.5)", marginTop:"3px" }}>
-                    vs {bet.opponentName || bet.opponentEmail || "opponent"}
-                  </div>
-                </div>
-              </div>
-            )}
-
             {/* Upload button */}
             <button type="button"
               onClick={handleUpload}
@@ -279,11 +372,17 @@ export default function UploadProof({ user }) {
                 cursor:(!file || uploading) ? "not-allowed" : "pointer",
                 transition:"all 0.2s",
               }}>
-              {uploading ? "⏳ UPLOADING..." : "💀 POST FORFEIT"}
+              {uploading
+                ? "⏳ UPLOADING..."
+                : isDailyChallenge
+                  ? "💪 POST PROOF"
+                  : "💀 POST FORFEIT"}
             </button>
 
             <div style={{ textAlign:"center", fontSize:"11px", color:C.muted, fontFamily:"monospace" }}>
-              Max 100 MB · Your opponent will be notified to approve 🔔
+              {isDailyChallenge
+                ? "Max 100 MB · Earns +2 honour 🏅"
+                : "Max 100 MB · Your opponent will be notified to approve 🔔"}
             </div>
           </>
         )}

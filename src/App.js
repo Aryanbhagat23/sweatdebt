@@ -206,7 +206,9 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
         <Route path="/create"                element={<CreateBet user={user}/>}/>
         <Route path="/upload/:betId"         element={<UploadProof user={user}/>}/>
         <Route path="/upload"                element={<UploadProof user={user}/>}/>
-
+        <Route path="/upload-proof"        element={<UploadProof user={user} />} />
+        <Route path="/upload-proof/:betId" element={<UploadProof user={user} />} />
+        
         {/* group bets */}
         <Route path="/group-bets"            element={<GroupBets user={user}/>}/>
         <Route path="/group-bets/:id"        element={<GroupBetRoom user={user}/>}/>
