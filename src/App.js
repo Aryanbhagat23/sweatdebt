@@ -5,6 +5,7 @@ import { requestNotificationPermission, onForegroundMessage } from "./firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, onSnapshot, collection, query, where } from "firebase/firestore";
 import T from "./theme";
+import { captureReferralCode, claimReferral } from "./utils/referral";
 
 import AuthScreen       from "./pages/AuthScreen";
 import Onboarding       from "./pages/Onboarding";
@@ -30,8 +31,13 @@ import AdminDashboard   from "./pages/AdminDashboard";
 import SweatCard        from "./pages/Sweatcard";
 import ChallengePage    from "./pages/Challengepage";
 import JuryVote         from "./pages/Juryvote";
+import NotificationToast from "./components/NotificationToast";
 
-// ── Logout page — signs out then redirects to auth ────────────────────────────
+// ── Capture referral code immediately when app loads ─────────────────────────
+// Must be called before any renders so the ?ref= param is saved before routing
+captureReferralCode();
+
+// ── Logout page ───────────────────────────────────────────────────────────────
 function LogoutPage() {
   const navigate = useNavigate();
   useEffect(() => {
@@ -206,9 +212,9 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
         <Route path="/create"                element={<CreateBet user={user}/>}/>
         <Route path="/upload/:betId"         element={<UploadProof user={user}/>}/>
         <Route path="/upload"                element={<UploadProof user={user}/>}/>
-        <Route path="/upload-proof"        element={<UploadProof user={user} />} />
-        <Route path="/upload-proof/:betId" element={<UploadProof user={user} />} />
-        
+        <Route path="/upload-proof"          element={<UploadProof user={user}/>}/>
+        <Route path="/upload-proof/:betId"   element={<UploadProof user={user}/>}/>
+
         {/* group bets */}
         <Route path="/group-bets"            element={<GroupBets user={user}/>}/>
         <Route path="/group-bets/:id"        element={<GroupBetRoom user={user}/>}/>
@@ -232,7 +238,7 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
         <Route path="/admin"                 element={<AdminDashboard user={user}/>}/>
         <Route path="/sweat-card"            element={<SweatCard user={user}/>}/>
         <Route path="/challenge/:betId"      element={<ChallengePage user={user}/>}/>
-        <Route path="/logout"               element={<LogoutPage/>}/>
+        <Route path="/logout"                element={<LogoutPage/>}/>
       </Routes>
 
       <NavBar user={user} livePhoto={livePhoto} unreadDMs={unreadDMs}/>
@@ -243,9 +249,9 @@ function AppContent({ user, needsOnboarding, onOnboardingComplete }) {
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [user,             setUser]             = useState(null);
-  const [loading,          setLoading]          = useState(true);
-  const [needsOnboarding,  setNeedsOnboarding]  = useState(false);
+  const [user,            setUser]            = useState(null);
+  const [loading,         setLoading]         = useState(true);
+  const [needsOnboarding, setNeedsOnboarding] = useState(false);
 
   useEffect(() => { document.body.style.background = "#e8f5e9"; }, []);
 
@@ -255,8 +261,14 @@ export default function App() {
         const r = await saveUserProfile(u);
         setUser(u);
         setNeedsOnboarding(r?.isNew || r?.needsOnboarding || false);
+
         // ✅ Request push notification permission after login
         requestNotificationPermission(u.uid).catch(() => {});
+
+        // ✅ Claim referral bonus if this is a new user with a referral code
+        if (r?.isNew) {
+          claimReferral(u.uid, u.displayName || "").catch(() => {});
+        }
       } else {
         setUser(null);
         setNeedsOnboarding(false);
@@ -289,6 +301,7 @@ export default function App() {
 
   return (
     <BrowserRouter>
+      <NotificationToast user={user} />
       <div style={{ background:T.bg0, minHeight:"100vh" }}>
         <AppContent
           user={user}

@@ -1,24 +1,32 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { db } from "../firebase";
 import {
   collection, onSnapshot, doc, updateDoc, deleteDoc,
   increment, getDocs, getDoc, addDoc, serverTimestamp,
+  query, orderBy, limit, startAfter, where,
 } from "firebase/firestore";
 import { useNavigate } from "react-router-dom";
 import T from "../theme";
 import NotificationBell from "../components/NotificationBell";
 import CommentsPanel from "../components/CommentsPanel";
+import { notifyBetApproved, notifyBetDisputed, notifyJurySelected } from "../utils/pushNotification";
+
+const PAGE_SIZE = 10; // videos per page
 
 export default function Feed({ user, onBellClick }) {
   const navigate = useNavigate();
 
   const [videos,        setVideos]        = useState([]);
   const [loading,       setLoading]       = useState(true);
+  const [loadingMore,   setLoadingMore]   = useState(false);
+  const [hasMore,       setHasMore]       = useState(true);
+  const [lastDoc,       setLastDoc]       = useState(null);
   const [activeTab,     setActiveTab]     = useState("forYou");
   const [friendUids,    setFriendUids]    = useState(new Set());
   const [showComments,  setShowComments]  = useState(false);
   const [activeVideoId, setActiveVideoId] = useState(null);
   const [commentCounts, setCommentCounts] = useState({});
+  const unsubRef = useRef(null);
 
   useEffect(() => {
     if (!user) return;
@@ -27,18 +35,62 @@ export default function Feed({ user, onBellClick }) {
       .catch(() => {});
   }, [user]);
 
+  // ── Initial load — first PAGE_SIZE videos ────────────────────────────────────
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "videos"), snap => {
-      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      data.sort((a, b) =>
-        (b.createdAt?.toDate?.() || 0) - (a.createdAt?.toDate?.() || 0)
-      );
-      setVideos(data);
-      setLoading(false);
-    });
-    return () => unsub();
-  }, []);
+    // Unsubscribe from any previous listener
+    if (unsubRef.current) { unsubRef.current(); unsubRef.current = null; }
 
+    setLoading(true);
+    setVideos([]);
+    setLastDoc(null);
+    setHasMore(true);
+
+    const q = query(
+      collection(db, "videos"),
+      orderBy("createdAt", "desc"),
+      limit(PAGE_SIZE)
+    );
+
+    const unsub = onSnapshot(q, snap => {
+      const data = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setVideos(data);
+      setLastDoc(snap.docs[snap.docs.length - 1] || null);
+      setHasMore(snap.docs.length === PAGE_SIZE);
+      setLoading(false);
+    }, () => setLoading(false));
+
+    unsubRef.current = unsub;
+    return () => { if (unsubRef.current) unsubRef.current(); };
+  }, []);  // only runs once on mount
+
+  // ── Load more videos (called when user nears the end) ────────────────────────
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore || !lastDoc) return;
+    setLoadingMore(true);
+    try {
+      const q = query(
+        collection(db, "videos"),
+        orderBy("createdAt", "desc"),
+        startAfter(lastDoc),
+        limit(PAGE_SIZE)
+      );
+      const snap = await getDocs(q);
+      const newVideos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setVideos(prev => {
+        // Deduplicate by id in case of real-time updates
+        const ids = new Set(prev.map(v => v.id));
+        const fresh = newVideos.filter(v => !ids.has(v.id));
+        return [...prev, ...fresh];
+      });
+      setLastDoc(snap.docs[snap.docs.length - 1] || lastDoc);
+      setHasMore(snap.docs.length === PAGE_SIZE);
+    } catch(e) { console.error("loadMore error:", e); }
+    setLoadingMore(false);
+  }, [loadingMore, hasMore, lastDoc]);
+
+  // ── Tab filtering ─────────────────────────────────────────────────────────────
+  // For "For You" and "Friends" use the paginated list
+  // For "Trending" sort the already-loaded videos by engagement score
   let filtered = videos;
   if (activeTab === "friends") {
     filtered = videos.filter(v => friendUids.has(v.uploadedBy));
@@ -118,16 +170,50 @@ export default function Feed({ user, onBellClick }) {
             </div>
           </div>
         ) : (
-          filtered.map(video => (
-            <ReelPage
-              key={video.id}
-              video={video}
-              currentUser={user}
-              onCommentOpen={() => { setActiveVideoId(video.id); setShowComments(true); }}
-              onNavigate={navigate}
-              commentCount={commentCounts[video.id] ?? video.comments ?? 0}
-            />
-          ))
+          <>
+            {filtered.map((video, index) => (
+              <ReelPage
+                key={video.id}
+                video={video}
+                currentUser={user}
+                onCommentOpen={() => { setActiveVideoId(video.id); setShowComments(true); }}
+                onNavigate={navigate}
+                commentCount={commentCounts[video.id] ?? video.comments ?? 0}
+                // ✅ Trigger loadMore when user reaches 2nd-to-last video
+                onNearEnd={index === filtered.length - 2 ? loadMore : undefined}
+              />
+            ))}
+
+            {/* Loading more spinner — shown as a snap-stop page */}
+            {loadingMore && (
+              <div style={{ height:"100dvh", background:"#000", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"16px", scrollSnapAlign:"start" }}>
+                <style>{`@keyframes _sp{to{transform:rotate(360deg)}}`}</style>
+                <div style={{ width:"32px", height:"32px", borderRadius:"50%", border:"3px solid #333", borderTop:`3px solid ${T.accent}`, animation:"_sp 0.8s linear infinite" }}/>
+                <div style={{ fontFamily:T.fontMono, fontSize:"12px", color:"rgba(255,255,255,0.4)", letterSpacing:"0.08em" }}>
+                  LOADING MORE…
+                </div>
+              </div>
+            )}
+
+            {/* End of feed message */}
+            {!hasMore && filtered.length > 0 && !loadingMore && (
+              <div style={{ height:"100dvh", background:"#000", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"12px", scrollSnapAlign:"start" }}>
+                <div style={{ fontSize:"48px" }}>🏆</div>
+                <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:"#fff", letterSpacing:"0.04em", fontStyle:"italic" }}>
+                  You've seen it all
+                </div>
+                <div style={{ fontFamily:T.fontBody, fontSize:"14px", color:"rgba(255,255,255,0.45)", textAlign:"center", padding:"0 32px" }}>
+                  Go make a bet so there's more to watch 😤
+                </div>
+                <button
+                  onClick={() => navigate("/create")}
+                  style={{ marginTop:"8px", padding:"12px 24px", background:T.accent, border:"none", borderRadius:"20px", fontFamily:T.fontDisplay, fontSize:"16px", color:"#052e16", cursor:"pointer", letterSpacing:"0.04em" }}
+                >
+                  ⚔️ NEW BET
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -146,7 +232,7 @@ export default function Feed({ user, onBellClick }) {
 /* ─────────────────────────────────────────────────────────────────
    REEL PAGE
 ───────────────────────────────────────────────────────────────── */
-function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount }) {
+function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount, onNearEnd }) {
   const [liked,       setLiked]       = useState(false);
   const [likes,       setLikes]       = useState(video.likes || 0);
   const [approved,    setApproved]    = useState(video.approved || false);
@@ -179,14 +265,21 @@ function ReelPage({ video, currentUser, onCommentOpen, onNavigate, commentCount 
     if (!el) return;
     const observer = new IntersectionObserver(
       ([entry]) => {
-        if (entry.isIntersecting) { vidRef.current?.play().catch(()=>{}); setPlaying(true); }
-        else                       { vidRef.current?.pause();              setPlaying(false); }
+        if (entry.isIntersecting) {
+          vidRef.current?.play().catch(()=>{});
+          setPlaying(true);
+          // ✅ Trigger load more when this video (near end of list) becomes visible
+          if (onNearEnd) onNearEnd();
+        } else {
+          vidRef.current?.pause();
+          setPlaying(false);
+        }
       },
       { threshold: 0.8 }
     );
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [onNearEnd]);
 
   const togglePlay = () => {
     const v = vidRef.current;

@@ -6,15 +6,15 @@ import {
   getDocs, query, where, setDoc, doc,
 } from "firebase/firestore";
 import T from "../theme";
+import { notifyBetChallenge } from "../utils/pushNotification";
 
-/* ── options ── */
 const FORFEITS = [
-  { id:"pushups",  icon:"💪", name:"Pushups"  },
-  { id:"run",      icon:"🏃", name:"Run"       },
-  { id:"burpees",  icon:"🔥", name:"Burpees"  },
-  { id:"squats",   icon:"🦵", name:"Squats"   },
-  { id:"plank",    icon:"🧘", name:"Plank"    },
-  { id:"custom",   icon:"✏️", name:"Custom"   },
+  { id:"pushups", icon:"💪", name:"Pushups" },
+  { id:"run",     icon:"🏃", name:"Run"     },
+  { id:"burpees", icon:"🔥", name:"Burpees" },
+  { id:"squats",  icon:"🦵", name:"Squats"  },
+  { id:"plank",   icon:"🧘", name:"Plank"   },
+  { id:"custom",  icon:"✏️", name:"Custom"  },
 ];
 
 const SPORTS = [
@@ -36,15 +36,100 @@ const DEADLINES = [
 const C = {
   page:"#f0fdf4", card:"#ffffff", border:"#d1fae5",
   heading:"#052e16", muted:"#6b7280", accent:"#10b981",
+  chalkboard:"#2C4A3E",
 };
+
+// ── AI forfeit generator ──────────────────────────────────────────────────────
+async function generateForfeits(sport, forfeitType) {
+  const sportLabel   = SPORTS.find(s => s.id === sport)?.name   || sport   || "any sport";
+  const forfeitLabel = FORFEITS.find(f => f.id === forfeitType)?.name || forfeitType || "exercise";
+
+  const prompt = `You are a creative assistant for SweatDebt, a fitness bet app where friends bet on sports and the loser does a physical forfeit.
+
+Generate exactly 3 funny, creative, and challenging forfeit ideas for someone who lost a ${sportLabel} bet. The forfeit type is: ${forfeitLabel}.
+
+Rules:
+- Each forfeit must include a specific number/amount (e.g. "50 pushups", "run 3km", "2 min plank")
+- Make them progressively harder (easy, medium, brutal)
+- Keep them fun and social media worthy — things people would actually film
+- Be creative and specific, not generic
+- Max 8 words each
+
+Respond with ONLY a JSON array of exactly 3 objects, no other text:
+[
+  {"label": "Easy 😅", "forfeit": "pushups", "reps": "30", "display": "30 pushups at the park"},
+  {"label": "Medium 😤", "forfeit": "burpees", "reps": "20", "display": "20 burpees in public"},
+  {"label": "Brutal 💀", "forfeit": "run", "reps": "5km", "display": "5km run in a onesie"}
+]
+
+The "forfeit" field must be one of: pushups, run, burpees, squats, plank, custom
+The "reps" field is the amount/number only (e.g. "50", "3km", "2 mins")
+The "display" field is the full fun description shown to the user`;
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 1000,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  const data = await response.json();
+  const text = data.content?.[0]?.text || "";
+
+  // strip any markdown fences just in case
+  const clean = text.replace(/```json|```/g, "").trim();
+  return JSON.parse(clean);
+}
+
+// ── AI trash talk generator ───────────────────────────────────────────────────
+async function generateTrashTalk({ challengerName, opponentName, sport, forfeit, reps }) {
+  const sportLabel   = SPORTS.find(s => s.id === sport)?.name   || sport   || "a bet";
+  const forfeitLabel = FORFEITS.find(f => f.id === forfeit)?.name || forfeit || "a forfeit";
+
+  // Randomly pick a tone so it's different every time
+  const tones = ["savage and funny", "hyped and competitive", "mocking and playful"];
+  const tone  = tones[Math.floor(Math.random() * tones.length)];
+
+  const prompt = `You are writing a WhatsApp challenge message for SweatDebt, a fitness bet app where friends bet and the loser films themselves doing a physical forfeit.
+
+Write a single short trash talk message from ${challengerName} to ${opponentName} about a ${sportLabel} bet where the loser must do ${reps} ${forfeitLabel}.
+
+Tone: ${tone}
+Rules:
+- Max 3 sentences, keep it punchy
+- Reference the sport and forfeit specifically  
+- End with something like "accept if you dare" or "you won't" or similar challenge
+- Include 1-2 relevant emojis naturally in the text
+- Do NOT include the challenge link (we add that separately)
+- Sound like a real person texting their friend, not a corporate message
+- Be creative — no generic phrases like "I challenge you"
+
+Respond with ONLY the message text, nothing else, no quotes around it.`;
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 200,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  const data = await response.json();
+  return data.content?.[0]?.text?.trim() || null;
+}
 
 export default function CreateBet({ user }) {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const prefilledUid   = searchParams.get("opponent");
-  const prefilledSport = searchParams.get("sport");
+  const [searchParams]   = useSearchParams();
+  const prefilledUid     = searchParams.get("opponent");
+  const prefilledSport   = searchParams.get("sport");
 
-  const [step,           setStep]           = useState(prefilledSport ? 2 : 1); // skip sport step if prefilled
+  const [step,           setStep]           = useState(prefilledSport ? 2 : 1);
   const [sport,          setSport]          = useState(prefilledSport || null);
   const [forfeit,        setForfeit]        = useState(null);
   const [reps,           setReps]           = useState("");
@@ -57,7 +142,12 @@ export default function CreateBet({ user }) {
   const [loading,        setLoading]        = useState(false);
   const [error,          setError]          = useState("");
 
-  /* load friend list */
+  // AI state
+  const [aiLoading,      setAiLoading]      = useState(false);
+  const [aiSuggestions,  setAiSuggestions]  = useState([]);
+  const [showAiSheet,    setShowAiSheet]    = useState(false);
+  const [aiError,        setAiError]        = useState("");
+
   useEffect(() => {
     if (!user) return;
     getDocs(collection(db, "users", user.uid, "friends"))
@@ -72,7 +162,31 @@ export default function CreateBet({ user }) {
       .catch(() => {});
   }, [user]);
 
-  /* ── send auto-message to challenged friend ── */
+  // ── AI suggest handler ──────────────────────────────────────────────────────
+  const handleAiSuggest = async () => {
+    setAiLoading(true);
+    setAiError("");
+    setAiSuggestions([]);
+    setShowAiSheet(true);
+    try {
+      const suggestions = await generateForfeits(sport, forfeit);
+      setAiSuggestions(suggestions);
+    } catch(e) {
+      console.error("AI forfeit error:", e);
+      setAiError("Couldn't generate ideas. Try again!");
+    }
+    setAiLoading(false);
+  };
+
+  // ── pick an AI suggestion ───────────────────────────────────────────────────
+  const handlePickSuggestion = (s) => {
+    setForfeit(s.forfeit);
+    setReps(s.reps);
+    setShowAiSheet(false);
+    setAiSuggestions([]);
+  };
+
+  // ── challenge message ───────────────────────────────────────────────────────
   const sendChallengeMessage = async (betId, opponentUid, opponentName) => {
     try {
       const participants = [user.uid, opponentUid].sort();
@@ -93,13 +207,13 @@ export default function CreateBet({ user }) {
       const msgText = `⚔️ SWEATDEBT CHALLENGE\n\n${user.displayName || "Someone"} challenged you!\n\n🏅 Sport: ${sport || "Any"}\n💀 Forfeit if you lose: ${forfeitLabel}\n⏰ Deadline: ${DEADLINES.find(d=>d.value===deadline)?.label}\n\n👆 Accept or decline on the Challenges tab.\n\nGood luck! 😤`;
 
       await addDoc(collection(db, "conversations", convoId, "messages"), {
-        senderId:    user.uid,
-        senderName:  user.displayName || "You",
-        text:        msgText,
-        type:        "challenge",
+        senderId:   user.uid,
+        senderName: user.displayName || "You",
+        text:       msgText,
+        type:       "challenge",
         betId,
-        createdAt:   serverTimestamp(),
-        read:        false,
+        createdAt:  serverTimestamp(),
+        read:       false,
       });
     } catch(e) {
       console.warn("Auto-message failed (non-critical):", e);
@@ -115,84 +229,114 @@ export default function CreateBet({ user }) {
 
     if (!email && !opponent?.uid) {
       setError("Please enter an opponent email or pick a friend.");
-      setLoading(false);
-      return;
+      setLoading(false); return;
     }
     if (!forfeit) {
       setError("Please choose a forfeit type.");
-      setLoading(false);
-      return;
+      setLoading(false); return;
     }
     if (!reps) {
       setError("Please enter reps or a description.");
-      setLoading(false);
-      return;
+      setLoading(false); return;
     }
 
     try {
       const deadlineDate = new Date(Date.now() + deadline * 3600000);
 
       const betDoc = await addDoc(collection(db, "bets"), {
-        createdBy:       user.uid,
-        createdByName:   user.displayName || "",
-        createdByEmail:  user.email || "",
-        opponentEmail:   email,
-        opponentUid:     opponent?.uid || null,
-        opponentName:    opponent?.displayName || opponent?.name || email,
-        sport:           sport || "custom",
+        createdBy:      user.uid,
+        createdByName:  user.displayName || "",
+        createdByEmail: user.email || "",
+        opponentEmail:  email,
+        opponentUid:    opponent?.uid || null,
+        opponentName:   opponent?.displayName || opponent?.name || email,
+        sport:          sport || "custom",
         forfeit,
         reps,
-        description:     description.trim() || `${user.displayName} vs ${opponent?.displayName || email} — Loser does ${reps} ${forfeit}`,
-        deadline:        deadlineDate,
-        status:          "pending",
-        proofUploaded:   false,
-        penalised:       false,
-        createdAt:       serverTimestamp(),
+        description:    description.trim() || `${user.displayName} vs ${opponent?.displayName || email} — Loser does ${reps} ${forfeit}`,
+        deadline:       deadlineDate,
+        status:         "pending",
+        proofUploaded:  false,
+        penalised:      false,
+        createdAt:      serverTimestamp(),
       });
 
       if (opponent?.uid) {
-        await sendChallengeMessage(
-          betDoc.id,
-          opponent.uid,
-          opponent.displayName || opponent.name || "Opponent"
-        );
+        await sendChallengeMessage(betDoc.id, opponent.uid, opponent.displayName || opponent.name || "Opponent");
+      }
+      if (opponent?.uid) {
+  await notifyBetChallenge({
+    toUserId:  opponent.uid,
+    fromUserId:user.uid,
+    fromName:  user.displayName || "Someone",
+    fromPhoto: user.photoURL    || null,
+    betId:     betDoc.id,
+    sport:     sport || "custom",
+    forfeit:   forfeit || "forfeit",
+    reps:      reps || "",
+  });
+}
+
+      const challengeLink = `https://sweatdebt.vercel.app/challenge/${betDoc.id}`;
+
+      // ── Generate AI trash talk for the WhatsApp message ──────────────────────
+      let trashTalk = null;
+      try {
+        const opponentDisplayName =
+          opponentMode === "friend"
+            ? (opponentFriend?.displayName || opponentFriend?.name || "your opponent")
+            : (opponentEmail.split("@")[0] || "your opponent");
+
+        trashTalk = await generateTrashTalk({
+          challengerName: user.displayName || "Someone",
+          opponentName:   opponentDisplayName,
+          sport,
+          forfeit,
+          reps,
+        });
+      } catch(e) {
+        console.warn("Trash talk generation failed (non-critical):", e);
       }
 
-      // ✅ Show share options with the challenge link
-      const challengeLink = `https://sweatdebt.vercel.app/challenge/${betDoc.id}`;
-      const whatsappMsg   = `⚔️ ${user.displayName} challenged you on SweatDebt!\n\nLoser does: ${reps} ${forfeit}\nSport: ${sport}\n\nAccept the challenge: ${challengeLink}`;
+      // Fall back to standard message if AI fails
+      const whatsappMsg = trashTalk
+        ? `${trashTalk}\n\n⚔️ SweatDebt Challenge — loser does ${reps} ${forfeit}\nAccept here: ${challengeLink}`
+        : `⚔️ ${user.displayName} challenged you on SweatDebt!\n\nLoser does: ${reps} ${forfeit}\nSport: ${sport}\n\nAccept the challenge: ${challengeLink}`;
 
-      const shared = await new Promise(resolve => {
+      await new Promise(resolve => {
         const sheet = document.createElement("div");
         sheet.style.cssText = `position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:flex-end;justify-content:center;`;
         sheet.innerHTML = `
-          <div style="background:#fff;width:100%;max-width:480px;border-radius:24px 24px 0 0;padding:24px;box-sizing:border-box;">
+          <div style="background:#fff;width:100%;max-width:480px;border-radius:24px 24px 0 0;padding:24px;box-sizing:border-box;max-height:90vh;overflow-y:auto;">
             <div style="width:40px;height:4px;background:#e5e7eb;border-radius:2px;margin:0 auto 20px;"></div>
-            <div style="font-family:monospace;font-size:18px;font-weight:700;color:#2C4A3E;margin-bottom:6px;">Challenge Sent! ⚔️</div>
-            <div style="font-family:system-ui;font-size:13px;color:#6b7280;margin-bottom:20px;">Share the link so they can accept:</div>
-            <div style="background:#f0fdf4;border:1px solid #d1fae5;border-radius:10px;padding:10px 14px;font-family:monospace;font-size:11px;color:#2C4A3E;margin-bottom:16px;word-break:break-all;">${challengeLink}</div>
-            <div style="display:flex;gap:10px;">
+            <div style="font-family:monospace;font-size:18px;font-weight:700;color:#2C4A3E;margin-bottom:4px;">Challenge Sent! ⚔️</div>
+            <div style="font-family:system-ui;font-size:13px;color:#6b7280;margin-bottom:16px;">Share it — your AI trash talk is ready 🔥</div>
+
+            ${trashTalk ? `
+            <div style="background:#f0fdf4;border:1px solid #d1fae5;border-radius:12px;padding:14px;margin-bottom:12px;">
+              <div style="font-family:monospace;font-size:9px;color:#10b981;letter-spacing:0.1em;font-weight:700;margin-bottom:8px;">✨ AI TRASH TALK</div>
+              <div style="font-family:system-ui;font-size:13px;color:#052e16;line-height:1.5;">${trashTalk}</div>
+              <div style="margin-top:10px;padding-top:10px;border-top:1px solid #d1fae5;font-family:monospace;font-size:10px;color:#6b7280;word-break:break-all;">🔗 ${challengeLink}</div>
+            </div>
+            ` : `
+            <div style="background:#f0fdf4;border:1px solid #d1fae5;border-radius:10px;padding:10px 14px;font-family:monospace;font-size:11px;color:#2C4A3E;margin-bottom:12px;word-break:break-all;">${challengeLink}</div>
+            `}
+
+            <div style="display:flex;gap:10px;margin-bottom:10px;">
               <button id="wa-btn" style="flex:1;padding:14px;background:#25D366;border:none;border-radius:12px;font-family:monospace;font-size:14px;font-weight:700;color:#fff;cursor:pointer;">📱 WhatsApp</button>
               <button id="copy-btn" style="flex:1;padding:14px;background:#2C4A3E;border:none;border-radius:12px;font-family:monospace;font-size:14px;font-weight:700;color:#10b981;cursor:pointer;">📋 Copy Link</button>
             </div>
-            <button id="done-btn" style="width:100%;margin-top:10px;padding:13px;background:#f3f4f6;border:none;border-radius:12px;font-family:system-ui;font-size:14px;color:#6b7280;cursor:pointer;">Done</button>
+            <button id="done-btn" style="width:100%;padding:13px;background:#f3f4f6;border:none;border-radius:12px;font-family:system-ui;font-size:14px;color:#6b7280;cursor:pointer;">Done</button>
           </div>`;
         document.body.appendChild(sheet);
 
-        sheet.querySelector("#wa-btn").onclick = () => {
-          window.open(`https://wa.me/?text=${encodeURIComponent(whatsappMsg)}`);
-        };
+        sheet.querySelector("#wa-btn").onclick   = () => window.open(`https://wa.me/?text=${encodeURIComponent(whatsappMsg)}`);
         sheet.querySelector("#copy-btn").onclick = () => {
           navigator.clipboard?.writeText(challengeLink);
           sheet.querySelector("#copy-btn").textContent = "✓ Copied!";
         };
-        sheet.querySelector("#done-btn").onclick = () => {
-          document.body.removeChild(sheet);
-          resolve(true);
-        };
-        sheet.onclick = (e) => {
-          if (e.target === sheet) { document.body.removeChild(sheet); resolve(true); }
-        };
+        sheet.querySelector("#done-btn").onclick = () => { document.body.removeChild(sheet); resolve(true); };
+        sheet.onclick = (e) => { if (e.target === sheet) { document.body.removeChild(sheet); resolve(true); } };
       });
 
       navigate("/");
@@ -215,25 +359,110 @@ export default function CreateBet({ user }) {
 
   return (
     <div style={{ minHeight:"100vh", background:C.page, paddingBottom:"100px" }}>
-      <style>{`@keyframes _sp{to{transform:rotate(360deg)}}`}</style>
+      <style>{`@keyframes _sp{to{transform:rotate(360deg)}} @keyframes slideUp{from{transform:translateY(100%)}to{transform:translateY(0)}}`}</style>
+
+      {/* ── AI SUGGESTIONS BOTTOM SHEET ── */}
+      {showAiSheet && (
+        <div
+          onClick={() => { setShowAiSheet(false); setAiSuggestions([]); }}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:9999, display:"flex", alignItems:"flex-end", justifyContent:"center" }}
+        >
+          <div
+            onClick={e => e.stopPropagation()}
+            style={{ width:"100%", maxWidth:"480px", background:"#fff", borderRadius:"24px 24px 0 0", padding:"24px", paddingBottom:"calc(24px + env(safe-area-inset-bottom, 0px))", animation:"slideUp 0.3s ease" }}
+          >
+            {/* drag handle */}
+            <div style={{ width:"40px", height:"4px", background:"#e5e7eb", borderRadius:"2px", margin:"0 auto 20px" }}/>
+
+            {/* header */}
+            <div style={{ display:"flex", alignItems:"center", gap:"10px", marginBottom:"6px" }}>
+              <span style={{ fontSize:"22px" }}>✨</span>
+              <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:C.chalkboard, letterSpacing:"0.04em", fontStyle:"italic" }}>AI Forfeit Ideas</div>
+            </div>
+            <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:C.muted, marginBottom:"20px" }}>
+              For a {SPORTS.find(s=>s.id===sport)?.name || "bet"} — tap one to use it
+            </div>
+
+            {/* loading state */}
+            {aiLoading && (
+              <div style={{ display:"flex", flexDirection:"column", alignItems:"center", padding:"32px 0", gap:"14px" }}>
+                <div style={{ width:"32px", height:"32px", borderRadius:"50%", border:`3px solid ${C.border}`, borderTop:`3px solid ${C.accent}`, animation:"_sp 0.8s linear infinite" }}/>
+                <div style={{ fontFamily:T.fontBody, fontSize:"13px", color:C.muted }}>Generating creative forfeits…</div>
+              </div>
+            )}
+
+            {/* error state */}
+            {aiError && !aiLoading && (
+              <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.3)", borderRadius:"12px", padding:"14px", marginBottom:"12px", fontFamily:T.fontBody, fontSize:"13px", color:"#ef4444", textAlign:"center" }}>
+                {aiError}
+                <button
+                  onClick={handleAiSuggest}
+                  style={{ display:"block", margin:"10px auto 0", padding:"8px 16px", background:C.chalkboard, border:"none", borderRadius:"8px", color:C.accent, fontFamily:T.fontBody, fontSize:"12px", cursor:"pointer" }}
+                >
+                  Try again
+                </button>
+              </div>
+            )}
+
+            {/* suggestions */}
+            {!aiLoading && aiSuggestions.length > 0 && (
+              <div style={{ display:"flex", flexDirection:"column", gap:"10px" }}>
+                {aiSuggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => handlePickSuggestion(s)}
+                    style={{
+                      background: i === 0 ? "#f0fdf4" : i === 1 ? "#fff7ed" : "#fef2f2",
+                      border: `1px solid ${i === 0 ? "#d1fae5" : i === 1 ? "#fed7aa" : "#fecaca"}`,
+                      borderRadius:"16px", padding:"16px", textAlign:"left", cursor:"pointer",
+                      transition:"transform 0.15s",
+                    }}
+                    onMouseDown={e => e.currentTarget.style.transform = "scale(0.98)"}
+                    onMouseUp={e => e.currentTarget.style.transform = "scale(1)"}
+                    onTouchStart={e => e.currentTarget.style.transform = "scale(0.98)"}
+                    onTouchEnd={e => e.currentTarget.style.transform = "scale(1)"}
+                  >
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:"6px" }}>
+                      <span style={{
+                        fontFamily:T.fontMono, fontSize:"10px", fontWeight:"700",
+                        color: i === 0 ? C.accent : i === 1 ? "#f97316" : "#ef4444",
+                        letterSpacing:"0.08em", textTransform:"uppercase",
+                      }}>
+                        {s.label}
+                      </span>
+                      <span style={{ fontSize:"16px", color:C.muted }}>→</span>
+                    </div>
+                    <div style={{ fontFamily:T.fontDisplay, fontSize:"18px", color:C.chalkboard, letterSpacing:"0.02em", fontStyle:"italic" }}>
+                      {s.display}
+                    </div>
+                  </button>
+                ))}
+
+                {/* regenerate */}
+                <button
+                  type="button"
+                  onClick={handleAiSuggest}
+                  style={{ padding:"12px", background:"transparent", border:`1px solid ${C.border}`, borderRadius:"12px", fontFamily:T.fontBody, fontSize:"13px", color:C.muted, cursor:"pointer", marginTop:"4px" }}
+                >
+                  ↻ Generate different ideas
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* header */}
       <div style={{ display:"flex", alignItems:"center", gap:"12px", padding:"52px 16px 20px" }}>
         <button
           type="button"
           onClick={() => step > 1 ? setStep(s => prefilledSport && s === 2 ? (navigate("/"), 1) : s - 1) : navigate("/")}
-          style={{
-            width:"44px", height:"44px", borderRadius:"50%",
-            background:C.card, border:`1px solid ${C.border}`,
-            color:C.heading, fontSize:"20px", cursor:"pointer",
-            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
-          }}>
+          style={{ width:"44px", height:"44px", borderRadius:"50%", background:C.card, border:`1px solid ${C.border}`, color:C.heading, fontSize:"20px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
           ←
         </button>
         <div style={{ flex:1 }}>
-          <div style={{ fontFamily:T.fontDisplay, fontSize:"24px", color:C.heading, letterSpacing:"0.04em", fontStyle:"italic" }}>
-            New Bet
-          </div>
+          <div style={{ fontFamily:T.fontDisplay, fontSize:"24px", color:C.heading, letterSpacing:"0.04em", fontStyle:"italic" }}>New Bet</div>
           <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:C.muted }}>
             step {step} of 4 — {STEP_TITLES[step - 1]}
           </div>
@@ -280,9 +509,35 @@ export default function CreateBet({ user }) {
         {/* ── STEP 2: Forfeit ── */}
         {step === 2 && (
           <div style={{ display:"flex", flexDirection:"column", gap:"16px" }}>
-            <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:C.heading, letterSpacing:"0.04em", fontStyle:"italic" }}>
-              What does the loser do?
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:C.heading, letterSpacing:"0.04em", fontStyle:"italic" }}>
+                What does the loser do?
+              </div>
+              {/* ✨ AI Suggest button */}
+              <button
+                type="button"
+                onClick={handleAiSuggest}
+                disabled={aiLoading}
+                style={{
+                  display:"flex", alignItems:"center", gap:"5px",
+                  padding:"8px 14px",
+                  background: C.chalkboard,
+                  border:"none",
+                  borderRadius:"20px",
+                  fontFamily:T.fontBody, fontSize:"12px", fontWeight:"600",
+                  color:C.accent,
+                  cursor:"pointer",
+                  flexShrink:0,
+                  opacity:aiLoading ? 0.7 : 1,
+                  boxShadow:`0 2px 8px rgba(16,185,129,0.25)`,
+                }}
+              >
+                <span style={{ fontSize:"14px" }}>✨</span>
+                AI Suggest
+              </button>
             </div>
+
+            {/* forfeit type grid */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:"10px" }}>
               {FORFEITS.map(f => (
                 <button key={f.id} type="button" onClick={() => setForfeit(f.id)}
@@ -292,6 +547,8 @@ export default function CreateBet({ user }) {
                 </button>
               ))}
             </div>
+
+            {/* reps input */}
             {forfeit && (
               <div>
                 <div style={{ fontFamily:T.fontMono, fontSize:"11px", color:C.muted, marginBottom:"8px", letterSpacing:"0.08em", textTransform:"uppercase" }}>
@@ -305,6 +562,13 @@ export default function CreateBet({ user }) {
                 />
               </div>
             )}
+
+            {/* hint if no forfeit selected yet */}
+            {!forfeit && (
+              <div style={{ background:`${C.accent}10`, border:`1px solid ${C.accent}30`, borderRadius:"12px", padding:"12px 14px", fontFamily:T.fontBody, fontSize:"13px", color:C.muted, textAlign:"center" }}>
+                ✨ Tap <strong style={{ color:C.chalkboard }}>AI Suggest</strong> above to get creative forfeit ideas!
+              </div>
+            )}
           </div>
         )}
 
@@ -314,7 +578,6 @@ export default function CreateBet({ user }) {
             <div style={{ fontFamily:T.fontDisplay, fontSize:"22px", color:C.heading, letterSpacing:"0.04em", fontStyle:"italic" }}>
               Who are you challenging?
             </div>
-
             <div style={{ display:"flex", background:C.card, border:`1px solid ${C.border}`, borderRadius:"12px", padding:"4px" }}>
               <button type="button" onClick={() => setOpponentMode("friend")}
                 style={{ flex:1, padding:"10px", borderRadius:"10px", fontFamily:T.fontBody, fontSize:"13px", fontWeight:"500", cursor:"pointer", background:opponentMode==="friend"?C.heading:"transparent", color:opponentMode==="friend"?C.accent:C.muted, border:"none", transition:"all 0.2s" }}>
@@ -390,11 +653,10 @@ export default function CreateBet({ user }) {
               ))}
             </div>
 
-            {/* summary card */}
             <div style={{ background:C.card, border:`1px solid ${C.border}`, borderRadius:"16px", padding:"16px" }}>
               <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:C.muted, letterSpacing:"0.1em", textTransform:"uppercase", marginBottom:"12px" }}>Bet summary</div>
               {[
-                { label:"Sport",    val: sport   ? `${SPORTS.find(s=>s.id===sport)?.icon} ${sport}` : "—" },
+                { label:"Sport",    val: sport   ? `${SPORTS.find(s=>s.id===sport)?.icon} ${sport}`       : "—" },
                 { label:"Forfeit",  val: forfeit ? `${FORFEITS.find(f=>f.id===forfeit)?.icon} ${reps} ${forfeit}` : "—" },
                 { label:"Opponent", val: opponentMode==="friend" ? (opponentFriend?.displayName || "—") : (opponentEmail || "—") },
                 { label:"Deadline", val: DEADLINES.find(d=>d.value===deadline)?.label },
@@ -416,15 +678,7 @@ export default function CreateBet({ user }) {
       </div>
 
       {/* bottom button */}
-      <div style={{
-        position:"fixed", bottom:0,
-        left:"50%", transform:"translateX(-50%)",
-        width:"100%", maxWidth:"480px",
-        padding:"16px",
-        background:`${C.page}f0`,
-        borderTop:`1px solid ${C.border}`,
-        paddingBottom:"calc(16px + env(safe-area-inset-bottom, 0px))",
-      }}>
+      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:"480px", padding:"16px", background:`${C.page}f0`, borderTop:`1px solid ${C.border}`, paddingBottom:"calc(16px + env(safe-area-inset-bottom, 0px))" }}>
         {step < 4 ? (
           <button type="button"
             onClick={() => setStep(s => s + 1)}

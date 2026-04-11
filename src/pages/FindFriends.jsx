@@ -7,6 +7,7 @@ import {
   getDoc, addDoc, serverTimestamp, updateDoc,
 } from "firebase/firestore";
 import T from "../theme";
+import { notifyFriendRequest, notifyFriendAccepted } from "../utils/pushNotification";
 
 const CHALK  = "#2C4A3E";
 const MINT   = "#f0fdf4";
@@ -16,16 +17,15 @@ const BORDER = "#d1fae5";
 const WHITE  = "#ffffff";
 
 export default function FindFriends({ user }) {
-  const navigate  = useNavigate();
+  const navigate   = useNavigate();
   const [search,   setSearch]   = useState("");
   const [results,  setResults]  = useState([]);
   const [friends,  setFriends]  = useState([]);
-  const [sent,     setSent]     = useState([]); // outgoing pending requests
-  const [incoming, setIncoming] = useState([]); // incoming requests
+  const [sent,     setSent]     = useState([]);
+  const [incoming, setIncoming] = useState([]);
   const [loading,  setLoading]  = useState(false);
   const [actioning,setActioning]= useState({});
 
-  // Load friends
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(collection(db,"users",user.uid,"friends"),
@@ -33,7 +33,6 @@ export default function FindFriends({ user }) {
     return () => unsub();
   }, [user]);
 
-  // Load sent requests
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db,"friend_requests"), where("fromUid","==",user.uid), where("status","==","pending"));
@@ -41,7 +40,6 @@ export default function FindFriends({ user }) {
     return () => unsub();
   }, [user]);
 
-  // Load incoming requests
   useEffect(() => {
     if (!user) return;
     const q = query(collection(db,"friend_requests"), where("toUid","==",user.uid), where("status","==","pending"));
@@ -49,9 +47,9 @@ export default function FindFriends({ user }) {
     return () => unsub();
   }, [user]);
 
-  const friendUids  = new Set(friends.map(f => f.uid));
-  const sentUids    = new Set(sent.map(r => r.toUid));
-  const incomingUids= new Set(incoming.map(r => r.fromUid));
+  const friendUids   = new Set(friends.map(f => f.uid));
+  const sentUids     = new Set(sent.map(r => r.toUid));
+  const incomingUids = new Set(incoming.map(r => r.fromUid));
 
   const handleSearch = async () => {
     if (!search.trim()) return;
@@ -71,7 +69,7 @@ export default function FindFriends({ user }) {
     setLoading(false);
   };
 
-  // Send friend request
+  // ✅ Send friend request — uses pushNotification helper (Firestore + push)
   const handleSendRequest = async (person) => {
     setActioning(a => ({...a, [person.uid]:true}));
     try {
@@ -85,27 +83,23 @@ export default function FindFriends({ user }) {
         status:    "pending",
         createdAt: serverTimestamp(),
       });
-      // Notify recipient
-      await addDoc(collection(db,"notifications"), {
-        toUserId:   person.uid,
-        fromUserId: user.uid,
-        fromName:   user.displayName || "Someone",
-        type:       "friend_request",
-        message:    `${user.displayName || "Someone"} sent you a friend request!`,
-        read:       false,
-        createdAt:  serverTimestamp(),
+      // ✅ replaced manual addDoc with helper — sends Firestore notif + push notification
+      await notifyFriendRequest({
+        toUserId:  person.uid,
+        fromUserId:user.uid,
+        fromName:  user.displayName || "Someone",
+        fromPhoto: user.photoURL    || null,
       });
     } catch(e) { console.error(e); }
     setActioning(a => ({...a, [person.uid]:false}));
   };
 
-  // Accept friend request
+  // ✅ Accept friend request — uses pushNotification helper
   const handleAccept = async (req) => {
     setActioning(a => ({...a, [req.id]:true}));
     try {
-      // Mark request as accepted
       await updateDoc(doc(db,"friend_requests",req.id), { status:"accepted" });
-      // Add to both friends lists
+
       const theirSnap = await getDoc(doc(db,"users",req.fromUid));
       const them = theirSnap.data() || {};
       const mySnap = await getDoc(doc(db,"users",user.uid));
@@ -121,25 +115,23 @@ export default function FindFriends({ user }) {
         username: me.username||"", email: me.email||user.email||"",
         photoURL: me.photoURL||user.photoURL||null,
       });
-      // Notify sender
-      await addDoc(collection(db,"notifications"), {
-        toUserId: req.fromUid, fromUserId: user.uid,
-        fromName: user.displayName||"Someone",
-        type: "friend_accepted",
-        message: `${user.displayName||"Someone"} accepted your friend request! 🎉`,
-        read: false, createdAt: serverTimestamp(),
+
+      // ✅ replaced manual addDoc with helper — sends Firestore notif + push notification
+      await notifyFriendAccepted({
+        toUserId:  req.fromUid,
+        fromUserId:user.uid,
+        fromName:  user.displayName || "Someone",
+        fromPhoto: user.photoURL    || null,
       });
     } catch(e) { console.error(e); }
     setActioning(a => ({...a, [req.id]:false}));
   };
 
-  // Decline request
   const handleDecline = async (req) => {
     try { await updateDoc(doc(db,"friend_requests",req.id), { status:"declined" }); }
     catch(e) { console.error(e); }
   };
 
-  // Remove friend
   const handleRemove = async (uid) => {
     try {
       await deleteDoc(doc(db,"users",user.uid,"friends",uid));
@@ -176,7 +168,6 @@ export default function FindFriends({ user }) {
 
   return (
     <div style={{ minHeight:"100vh", background:MINT, paddingBottom:"40px" }}>
-      {/* Header */}
       <div style={{ background:CHALK, padding:"52px 20px 20px", display:"flex", alignItems:"center", gap:"12px" }}>
         <button onClick={() => navigate(-1)} style={{ width:"36px", height:"36px", borderRadius:"50%", background:"rgba(255,255,255,0.12)", border:"none", color:"#fff", fontSize:"18px", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>‹</button>
         <div>
@@ -186,8 +177,6 @@ export default function FindFriends({ user }) {
       </div>
 
       <div style={{ padding:"20px" }}>
-
-        {/* Incoming requests */}
         {incoming.length > 0 && (
           <div style={{ marginBottom:"20px" }}>
             <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:ACCENT, letterSpacing:"0.1em", marginBottom:"10px", fontWeight:"700" }}>
@@ -220,7 +209,6 @@ export default function FindFriends({ user }) {
           </div>
         )}
 
-        {/* Search */}
         <div style={{ display:"flex", gap:"8px", marginBottom:"20px" }}>
           <input value={search} onChange={e => setSearch(e.target.value)} onKeyDown={e => e.key==="Enter" && handleSearch()}
             placeholder="Search by name or @username…"
@@ -231,7 +219,6 @@ export default function FindFriends({ user }) {
           </button>
         </div>
 
-        {/* Results */}
         {results.length > 0 && (
           <div style={{ marginBottom:"24px" }}>
             <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:MUTED, letterSpacing:"0.1em", marginBottom:"10px" }}>RESULTS ({results.length})</div>
@@ -247,7 +234,6 @@ export default function FindFriends({ user }) {
           <div style={{ textAlign:"center", padding:"24px", fontFamily:"system-ui", fontSize:"14px", color:MUTED }}>No users found for "{search}"</div>
         )}
 
-        {/* Friends list */}
         <div>
           <div style={{ fontFamily:T.fontMono, fontSize:"10px", color:MUTED, letterSpacing:"0.1em", marginBottom:"10px" }}>YOUR FRIENDS ({friends.length})</div>
           {friends.length === 0 ? (

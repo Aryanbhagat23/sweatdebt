@@ -11,6 +11,8 @@ import LiveSportsFeed from "../components/LiveSportsFeed";
 import NotificationBell from "../components/NotificationBell";
 import NotificationCenter from "../components/NotificationCenter";
 import { getPendingDebts, checkAndApplyPenalties } from "../utils/penaltySystem";
+import { notifyBetAccepted, notifyBetDeclined } from "../utils/pushNotification";
+
 
 /* ── Send notification helper ────────────────────────────────── */
 async function sendNotif({ toUid, fromUid, fromName, type, betId, text }) {
@@ -414,35 +416,31 @@ function BetCard({ bet, user, expanded, onToggle, navigate, isChallenge }) {
         status:      "accepted",
         deadline:    dl,
         acceptedAt:  serverTimestamp(),
-        // ✅ make sure opponentUid is set so Feed can identify the opponent
         opponentUid: user.uid,
         participants: [bet.createdBy, user.uid],
       });
-      // ✅ notify the challenger that their bet was accepted
-      await sendNotif({
-        toUid:    bet.createdBy,
-        fromUid:  user.uid,
-        fromName: user.displayName || "Your opponent",
-        type:     "bet_accepted",
-        betId:    bet.id,
-        text:     `${user.displayName || "Your opponent"} accepted your challenge! The bet is live 🔥`,
+      // ✅ single notification — notifyBetAccepted handles both Firestore doc + push
+      await notifyBetAccepted({
+        toUserId:   bet.createdBy,
+        fromUserId: user.uid,
+        fromName:   user.displayName || "Your opponent",
+        fromPhoto:  user.photoURL    || null,
+        betId:      bet.id,
       });
     } catch(e) { console.error(e); }
     setActioning(false);
   };
-
+ 
   const handleDecline = async () => {
     setActioning(true);
     try {
       await updateDoc(doc(db,"bets",bet.id), { status:"declined" });
-      // notify challenger
-      await sendNotif({
-        toUid:    bet.createdBy,
-        fromUid:  user.uid,
-        fromName: user.displayName || "Your opponent",
-        type:     "bet_declined",
-        betId:    bet.id,
-        text:     `${user.displayName || "Your opponent"} declined your challenge.`,
+      // ✅ single notification — notifyBetDeclined handles both Firestore doc + push
+      await notifyBetDeclined({
+        toUserId:   bet.createdBy,
+        fromUserId: user.uid,
+        fromName:   user.displayName || "Your opponent",
+        betId:      bet.id,
       });
     } catch(e) { console.error(e); }
     setActioning(false);
