@@ -1,25 +1,26 @@
 // src/components/InviteFriends.jsx
-// Shows on the ME page — lets users share their referral link
-// Both referrer and new user get +10 honour when link is used
+// Night Gold palette — matches ProfileOverlay design
 
 import React, { useState } from "react";
 import { getReferralLink, getReferralWhatsAppMsg } from "../utils/referral";
 import T from "../theme";
 
-const CHALK  = "#2C4A3E";
-const ACCENT = "#10b981";
-const MINT   = "#f0fdf4";
-const BORDER = "#d1fae5";
-const MUTED  = "#6b7280";
+const NAVY   = "#1a1a2e";
+const GOLD   = "#f5c518";
+const ORANGE = "#ff6b35";
+const SAND   = "#faf8f4";
+const SAND2  = "#f2ede4";
 const WHITE  = "#ffffff";
+const MUTED  = "#9ca3af";
+const BORDER = "#ede9e0";
 
 export default function InviteFriends({ user, referralCount = 0 }) {
   const [copied, setCopied] = useState(false);
 
   if (!user) return null;
 
-  const link     = getReferralLink(user.uid);
-  const waMsg    = getReferralWhatsAppMsg(user.displayName, user.uid);
+  const link  = getReferralLink(user.uid);
+  const waMsg = getReferralWhatsAppMsg(user.displayName, user.uid);
 
   const handleCopy = async () => {
     try {
@@ -35,11 +36,8 @@ export default function InviteFriends({ user, referralCount = 0 }) {
 
   const handleNativeShare = async () => {
     try {
-      if (navigator.share) {
-        await navigator.share({ title:"Join SweatDebt!", text:waMsg, url:link });
-      } else {
-        handleCopy();
-      }
+      if (navigator.share) await navigator.share({ title:"Join SweatDebt!", text:waMsg, url:link });
+      else handleCopy();
     } catch(e) {}
   };
 
@@ -49,34 +47,44 @@ export default function InviteFriends({ user, referralCount = 0 }) {
       border: `1px solid ${BORDER}`,
       borderRadius: "16px",
       overflow: "hidden",
-      marginBottom: "12px",
-      boxShadow: "0 1px 4px rgba(0,0,0,0.06)",
+      marginBottom: "10px",
     }}>
-      {/* header */}
+      {/* ── Header — navy/gold to match ME page hero ── */}
       <div style={{
-        background: CHALK,
+        background: NAVY,
         padding: "14px 16px",
         display: "flex",
         alignItems: "center",
         justifyContent: "space-between",
+        position: "relative",
+        overflow: "hidden",
       }}>
+        {/* Subtle ring decoration matching hero */}
+        <div style={{ position:"absolute", top:"-10px", right:"-10px", width:"70px", height:"70px", opacity:0.07, pointerEvents:"none" }}>
+          <svg viewBox="0 0 70 70" fill="none" width="70" height="70">
+            <circle cx="70" cy="0" r="35" stroke="white" strokeWidth="1"/>
+            <circle cx="70" cy="0" r="52" stroke="white" strokeWidth="1"/>
+          </svg>
+        </div>
+
         <div>
-          <div style={{ fontFamily: T.fontDisplay, fontSize: "17px", color: WHITE, letterSpacing: "0.04em", fontStyle: "italic" }}>
+          <div style={{ fontFamily: T.fontDisplay, fontSize: "16px", color: WHITE, letterSpacing: "0.04em", fontStyle: "italic" }}>
             🎁 Invite Friends
           </div>
-          <div style={{ fontFamily: T.fontBody, fontSize: "12px", color: "rgba(255,255,255,0.55)", marginTop: "2px" }}>
+          <div style={{ fontFamily: T.fontBody, fontSize: "11px", color: "rgba(255,255,255,0.45)", marginTop: "2px" }}>
             You both get +10 honour 💪
           </div>
         </div>
+
         {referralCount > 0 && (
           <div style={{
-            background: "rgba(16,185,129,0.2)",
-            border: "1px solid rgba(16,185,129,0.4)",
+            background: "rgba(245,197,24,0.15)",
+            border: "1px solid rgba(245,197,24,0.3)",
             borderRadius: "20px",
-            padding: "4px 12px",
-            fontFamily: T.fontMono,
-            fontSize: "11px",
-            color: ACCENT,
+            padding: "3px 10px",
+            fontFamily: "monospace",
+            fontSize: "10px",
+            color: GOLD,
             fontWeight: "700",
           }}>
             {referralCount} invited
@@ -84,8 +92,10 @@ export default function InviteFriends({ user, referralCount = 0 }) {
         )}
       </div>
 
-      <div style={{ padding: "14px 16px" }}>
-        {/* how it works */}
+      {/* ── Body — warm sand to match ME page body ── */}
+      <div style={{ padding: "14px 16px", background: SAND }}>
+
+        {/* How it works — 3 steps */}
         <div style={{ display: "flex", gap: "6px", marginBottom: "14px" }}>
           {[
             { step: "1", text: "Share your link" },
@@ -94,30 +104,30 @@ export default function InviteFriends({ user, referralCount = 0 }) {
           ].map((s, i) => (
             <div key={i} style={{ flex: 1, textAlign: "center" }}>
               <div style={{
-                width: "28px", height: "28px", borderRadius: "50%",
-                background: CHALK, color: ACCENT,
-                fontFamily: T.fontMono, fontSize: "13px", fontWeight: "700",
+                width: "26px", height: "26px", borderRadius: "50%",
+                background: NAVY, color: GOLD,
+                fontFamily: "monospace", fontSize: "12px", fontWeight: "700",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 margin: "0 auto 5px",
               }}>
                 {s.step}
               </div>
-              <div style={{ fontFamily: T.fontBody, fontSize: "11px", color: MUTED, lineHeight: "1.3" }}>
+              <div style={{ fontFamily: T.fontBody, fontSize: "10px", color: MUTED, lineHeight: "1.3" }}>
                 {s.text}
               </div>
             </div>
           ))}
         </div>
 
-        {/* link display */}
+        {/* Link display */}
         <div style={{
-          background: MINT,
+          background: WHITE,
           border: `1px solid ${BORDER}`,
           borderRadius: "10px",
           padding: "10px 12px",
           fontFamily: "monospace",
           fontSize: "11px",
-          color: CHALK,
+          color: NAVY,
           marginBottom: "10px",
           wordBreak: "break-all",
           lineHeight: "1.5",
@@ -125,7 +135,7 @@ export default function InviteFriends({ user, referralCount = 0 }) {
           🔗 {link}
         </div>
 
-        {/* share buttons */}
+        {/* Share buttons */}
         <div style={{ display: "flex", gap: "8px" }}>
           <button
             onClick={handleWhatsApp}
@@ -144,10 +154,10 @@ export default function InviteFriends({ user, referralCount = 0 }) {
             onClick={handleNativeShare}
             style={{
               flex: 1, padding: "11px",
-              background: CHALK, border: "none",
+              background: NAVY, border: "none",
               borderRadius: "12px",
               fontFamily: T.fontBody, fontSize: "13px", fontWeight: "600",
-              color: ACCENT, cursor: "pointer",
+              color: GOLD, cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
             }}
           >
@@ -157,24 +167,25 @@ export default function InviteFriends({ user, referralCount = 0 }) {
             onClick={handleCopy}
             style={{
               padding: "11px 14px",
-              background: copied ? `${ACCENT}15` : MINT,
-              border: `1px solid ${copied ? ACCENT : BORDER}`,
+              background: copied ? "rgba(245,197,24,0.1)" : WHITE,
+              border: `1px solid ${copied ? GOLD : BORDER}`,
               borderRadius: "12px",
               fontFamily: T.fontBody, fontSize: "13px", fontWeight: "600",
-              color: copied ? ACCENT : MUTED, cursor: "pointer",
+              color: copied ? GOLD : MUTED, cursor: "pointer",
               flexShrink: 0,
+              transition: "all 0.2s",
             }}
           >
             {copied ? "✓" : "📋"}
           </button>
         </div>
 
-        {/* coming soon rewards teaser */}
+        {/* Rewards teaser — night gold style */}
         <div style={{
           marginTop: "10px",
           padding: "8px 12px",
-          background: "rgba(245,166,35,0.08)",
-          border: "1px solid rgba(245,166,35,0.25)",
+          background: "rgba(245,197,24,0.08)",
+          border: "1px solid rgba(245,197,24,0.2)",
           borderRadius: "10px",
           fontFamily: T.fontBody,
           fontSize: "11px",
