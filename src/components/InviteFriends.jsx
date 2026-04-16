@@ -5,14 +5,14 @@ import React, { useState } from "react";
 import { getReferralLink, getReferralWhatsAppMsg } from "../utils/referral";
 import T from "../theme";
 
-const NAVY   = "#1a1a2e";
-const GOLD   = "#f5c518";
-const ORANGE = "#ff6b35";
-const SAND   = "#faf8f4";
-const SAND2  = "#f2ede4";
+const NAVY   = "#2C4A3E";
+const GOLD   = "#10b981";
+const ORANGE = "#6ee7b7";
+const SAND   = "#f0fdf4";
+const SAND2  = "#d1fae5";
 const WHITE  = "#ffffff";
-const MUTED  = "#9ca3af";
-const BORDER = "#ede9e0";
+const MUTED  = "#6b7280";
+const BORDER = "#d1fae5";
 
 export default function InviteFriends({ user, referralCount = 0 }) {
   const [copied, setCopied] = useState(false);
@@ -78,13 +78,13 @@ export default function InviteFriends({ user, referralCount = 0 }) {
 
         {referralCount > 0 && (
           <div style={{
-            background: "rgba(245,197,24,0.15)",
-            border: "1px solid rgba(245,197,24,0.3)",
+            background: "rgba(16,185,129,0.15)",
+            border: "1px solid rgba(16,185,129,0.3)",
             borderRadius: "20px",
             padding: "3px 10px",
             fontFamily: "monospace",
             fontSize: "10px",
-            color: GOLD,
+            color: "#10b981",
             fontWeight: "700",
           }}>
             {referralCount} invited
@@ -105,7 +105,7 @@ export default function InviteFriends({ user, referralCount = 0 }) {
             <div key={i} style={{ flex: 1, textAlign: "center" }}>
               <div style={{
                 width: "26px", height: "26px", borderRadius: "50%",
-                background: NAVY, color: GOLD,
+                background: NAVY, color: "#10b981",
                 fontFamily: "monospace", fontSize: "12px", fontWeight: "700",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 margin: "0 auto 5px",
@@ -157,7 +157,7 @@ export default function InviteFriends({ user, referralCount = 0 }) {
               background: NAVY, border: "none",
               borderRadius: "12px",
               fontFamily: T.fontBody, fontSize: "13px", fontWeight: "600",
-              color: GOLD, cursor: "pointer",
+              color: "#10b981", cursor: "pointer",
               display: "flex", alignItems: "center", justifyContent: "center", gap: "6px",
             }}
           >
@@ -185,7 +185,7 @@ export default function InviteFriends({ user, referralCount = 0 }) {
           marginTop: "10px",
           padding: "8px 12px",
           background: "rgba(245,197,24,0.08)",
-          border: "1px solid rgba(245,197,24,0.2)",
+          border: "1px solid rgba(16,185,129,0.2)",
           borderRadius: "10px",
           fontFamily: T.fontBody,
           fontSize: "11px",

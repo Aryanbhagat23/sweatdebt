@@ -8,15 +8,15 @@ import {
 import T from "../theme";
 import InviteFriends from "../components/InviteFriends";
 
-// ── Night Gold palette ─────────────────────────────────────────────────────────
-const NAVY    = "#1a1a2e";
-const GOLD    = "#f5c518";
-const ORANGE  = "#ff6b35";
-const SAND    = "#faf8f4";
-const SAND2   = "#f2ede4";
+// ── Chalkboard Green palette — matches rest of app ─────────────────────────
+const NAVY    = "#2C4A3E";  // chalkboard
+const GOLD    = "#10b981";  // accent green
+const ORANGE  = "#6ee7b7";  // soft mint
+const SAND    = "#f0fdf4";  // mint page bg
+const SAND2   = "#d1fae5";  // mint border bg
 const WHITE   = "#ffffff";
-const MUTED   = "#9ca3af";
-const BORDER  = "#ede9e0";
+const MUTED   = "#6b7280";
+const BORDER  = "#d1fae5";  // mint border
 const DANGER  = "#ef4444";
 const SUCCESS = "#10b981";
 
@@ -437,11 +437,11 @@ export default function ProfileOverlay({ user }){
               </div>
               {username && <div style={{fontFamily:"monospace",fontSize:"11px",color:"rgba(255,255,255,0.4)",marginTop:"1px"}}>@{username}</div>}
               <div style={{display:"flex",gap:"5px",flexWrap:"wrap",marginTop:"6px"}}>
-                <div style={{display:"inline-flex",alignItems:"center",gap:"4px",background:"rgba(245,197,24,0.15)",border:"1px solid rgba(245,197,24,0.3)",borderRadius:"20px",padding:"2px 9px",fontSize:"10px",color:GOLD,fontWeight:"700",fontFamily:"monospace"}}>
+                <div style={{display:"inline-flex",alignItems:"center",gap:"4px",background:"rgba(16,185,129,0.15)",border:"1px solid rgba(16,185,129,0.3)",borderRadius:"20px",padding:"2px 9px",fontSize:"10px",color:GOLD,fontWeight:"700",fontFamily:"monospace"}}>
                   {tier.emoji} {tier.label.toUpperCase()}
                 </div>
                 {stats.wins > 0 && (
-                  <div style={{display:"inline-flex",alignItems:"center",gap:"4px",background:"rgba(255,107,53,0.15)",border:"1px solid rgba(255,107,53,0.3)",borderRadius:"20px",padding:"2px 9px",fontSize:"10px",color:ORANGE,fontWeight:"700",fontFamily:"monospace"}}>
+                  <div style={{display:"inline-flex",alignItems:"center",gap:"4px",background:"rgba(16,185,129,0.1)",border:"1px solid rgba(16,185,129,0.25)",borderRadius:"20px",padding:"2px 9px",fontSize:"10px",color:ORANGE,fontWeight:"700",fontFamily:"monospace"}}>
                     🔥 {stats.wins}W
                   </div>
                 )}
@@ -496,7 +496,7 @@ export default function ProfileOverlay({ user }){
         {/* ── PRIMARY CTA: New Bet ── */}
         <div style={{margin:"14px 16px 0"}}>
           <button onClick={()=>goTo("/create")} style={{width:"100%",padding:"16px",background:NAVY,border:"none",borderRadius:"16px",display:"flex",alignItems:"center",gap:"12px",cursor:"pointer"}}>
-            <div style={{width:"42px",height:"42px",borderRadius:"12px",background:"rgba(245,197,24,0.15)",border:"1px solid rgba(245,197,24,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}}>⚔️</div>
+            <div style={{width:"42px",height:"42px",borderRadius:"12px",background:"rgba(16,185,129,0.15)",border:"1px solid rgba(16,185,129,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}}>⚔️</div>
             <div style={{flex:1,textAlign:"left"}}>
               <div style={{fontFamily:T.fontDisplay,fontSize:"17px",color:WHITE,letterSpacing:"0.03em",fontStyle:"italic"}}>New Bet</div>
               <div style={{fontFamily:T.fontBody,fontSize:"11px",color:"rgba(255,255,255,0.45)",marginTop:"1px"}}>Challenge a friend now</div>
