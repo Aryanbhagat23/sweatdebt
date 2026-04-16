@@ -8,15 +8,14 @@ import {
 import T from "../theme";
 import InviteFriends from "../components/InviteFriends";
 
-// ── Chalkboard Green palette — matches rest of app ─────────────────────────
-const NAVY    = "#2C4A3E";  // chalkboard
-const GOLD    = "#10b981";  // accent green
-const ORANGE  = "#6ee7b7";  // soft mint
-const SAND    = "#f0fdf4";  // mint page bg
-const SAND2   = "#d1fae5";  // mint border bg
+// ── Mint palette — matches rest of app ────────────────────────────────────────
+const CHALK   = "#2C4A3E";  // chalkboard green (header bg + primary text)
+const GREEN   = "#10b981";  // accent green
+const MINT    = "#f0fdf4";  // page background
+const MINT2   = "#d1fae5";  // border / card bg
 const WHITE   = "#ffffff";
 const MUTED   = "#6b7280";
-const BORDER  = "#d1fae5";  // mint border
+const BORDER  = "#d1fae5";
 const DANGER  = "#ef4444";
 const SUCCESS = "#10b981";
 
@@ -25,10 +24,10 @@ const TIERS = [
   { label:"Iron",     min:50,  emoji:"⚙️",  color:"#6b7280" },
   { label:"Bronze",   min:150, emoji:"🥉", color:"#cd7f32" },
   { label:"Silver",   min:300, emoji:"🥈", color:"#9ca3af" },
-  { label:"Gold",     min:500, emoji:"🥇", color:GOLD      },
+  { label:"Gold",     min:500, emoji:"🥇", color:GREEN     },
   { label:"Platinum", min:750, emoji:"💎", color:"#38bdf8" },
   { label:"Diamond",  min:1000,emoji:"💠", color:"#818cf8" },
-  { label:"Legend",   min:1500,emoji:"👑", color:ORANGE    },
+  { label:"Legend",   min:1500,emoji:"👑", color:"#f59e0b" },
 ];
 function getTier(score=0){ return [...TIERS].reverse().find(t=>score>=t.min)||TIERS[0]; }
 function getNext(score=0){ return TIERS.find(t=>t.min>score)||null; }
@@ -64,18 +63,18 @@ const SOCIAL_PLATFORMS = [
 ];
 
 // ── UI helpers ─────────────────────────────────────────────────────────────────
-function NightRow({ icon, label, sub, right, onClick, danger }){
+function Row({ icon, label, sub, right, onClick, danger }){
   return (
     <div onClick={onClick} style={{
       display:"flex", alignItems:"center", gap:"12px",
       padding:"13px 16px", cursor:onClick?"pointer":"default",
       borderBottom:`1px solid ${BORDER}`,
     }}>
-      <div style={{width:"34px",height:"34px",borderRadius:"10px",background:SAND2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",flexShrink:0}}>
+      <div style={{width:"34px",height:"34px",borderRadius:"10px",background:MINT2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",flexShrink:0}}>
         {icon}
       </div>
       <div style={{flex:1}}>
-        <div style={{fontFamily:T.fontBody,fontSize:"14px",color:danger?DANGER:NAVY,fontWeight:"600"}}>{label}</div>
+        <div style={{fontFamily:T.fontBody,fontSize:"14px",color:danger?DANGER:CHALK,fontWeight:"600"}}>{label}</div>
         {sub && <div style={{fontFamily:T.fontBody,fontSize:"11px",color:MUTED,marginTop:"1px"}}>{sub}</div>}
       </div>
       {right && <div style={{color:MUTED,fontSize:"14px"}}>{right}</div>}
@@ -83,7 +82,7 @@ function NightRow({ icon, label, sub, right, onClick, danger }){
   );
 }
 
-function NightCard({ children, style={} }){
+function Card({ children, style={} }){
   return (
     <div style={{background:WHITE,borderRadius:"16px",overflow:"hidden",marginBottom:"10px",border:`1px solid ${BORDER}`,...style}}>
       {children}
@@ -110,7 +109,7 @@ function Toggle({ value, onChange }){
 function ToggleRow({ label, value, onChange }){
   return (
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"13px 16px",borderBottom:`1px solid ${BORDER}`}}>
-      <span style={{fontFamily:T.fontBody,fontSize:"14px",color:NAVY}}>{label}</span>
+      <span style={{fontFamily:T.fontBody,fontSize:"14px",color:CHALK}}>{label}</span>
       <Toggle value={value} onChange={onChange}/>
     </div>
   );
@@ -118,16 +117,16 @@ function ToggleRow({ label, value, onChange }){
 
 const menuBtnStyle = {
   display:"block",width:"100%",padding:"16px",background:"none",border:"none",
-  fontFamily:"inherit",fontSize:"16px",color:NAVY,textAlign:"left",cursor:"pointer",
+  fontFamily:"inherit",fontSize:"16px",color:CHALK,textAlign:"left",cursor:"pointer",
   borderBottom:`1px solid ${BORDER}`,
 };
 
 function Overlay({ children, title, onBack }){
   return (
-    <div style={{minHeight:"100vh",background:NAVY}}>
-      <div style={{minHeight:"100vh",background:SAND,paddingBottom:"90px"}}>
-        <div style={{background:NAVY,paddingTop:"max(env(safe-area-inset-top, 0px), 48px)",paddingBottom:"16px",paddingLeft:"16px",paddingRight:"16px",display:"flex",alignItems:"center",gap:"12px",position:"sticky",top:0,zIndex:10}}>
-          <button onClick={onBack} style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:"50%",width:"36px",height:"36px",color:WHITE,fontSize:"18px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
+    <div style={{minHeight:"100vh",background:MINT}}>
+      <div style={{minHeight:"100vh",background:MINT,paddingBottom:"90px"}}>
+        <div style={{background:CHALK,paddingTop:"max(env(safe-area-inset-top, 0px), 48px)",paddingBottom:"16px",paddingLeft:"16px",paddingRight:"16px",display:"flex",alignItems:"center",gap:"12px",position:"sticky",top:0,zIndex:10}}>
+          <button onClick={onBack} style={{background:"rgba(255,255,255,0.15)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:"50%",width:"36px",height:"36px",color:WHITE,fontSize:"18px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>‹</button>
           <span style={{fontFamily:T.fontDisplay,fontSize:"22px",letterSpacing:"0.04em",color:WHITE,fontStyle:"italic"}}>{title}</span>
         </div>
         <div style={{padding:"12px 16px"}}>{children}</div>
@@ -247,70 +246,70 @@ export default function ProfileOverlay({ user }){
   if(screen==="settings") return (
     <Overlay onBack={()=>setScreen("main")} title="Settings">
       <SectionLabel label="Notifications"/>
-      <NightCard>
+      <Card>
         <ToggleRow label="Bet updates"         value={notifBets}     onChange={v=>{setNotifBets(v);saveSettings({notifBets:v});}}/>
         <ToggleRow label="Proof approved"      value={notifApproved} onChange={v=>{setNotifApproved(v);saveSettings({notifApproved:v});}}/>
         <ToggleRow label="Friend requests"     value={notifFriends}  onChange={v=>{setNotifFriends(v);saveSettings({notifFriends:v});}}/>
-      </NightCard>
+      </Card>
       <SectionLabel label="Privacy"/>
-      <NightCard>
+      <Card>
         <ToggleRow label="Public profile"      value={pubProfile} onChange={v=>{setPubProfile(v);saveSettings({pubProfile:v});}}/>
         <ToggleRow label="Public videos"       value={pubVideos}  onChange={v=>{setPubVideos(v);saveSettings({pubVideos:v});}}/>
         <ToggleRow label="Show on leaderboard" value={pubLeader}  onChange={v=>{setPubLeader(v);saveSettings({pubLeader:v});}}/>
-      </NightCard>
+      </Card>
       <SectionLabel label="Account"/>
-      <NightCard>
-        <NightRow icon="✏️" label="Edit Profile"    onClick={()=>goTo("/edit-profile")}    right="›"/>
-        <NightRow icon="🔒" label="Change Password" onClick={()=>goTo("/change-password")} right="›"/>
-        <NightRow icon="🚪" label="Log Out"         onClick={()=>navigate("/logout")}      danger/>
-        <NightRow icon="🗑️" label="Delete Account"  onClick={()=>alert("Contact support to delete your account.")} danger/>
-      </NightCard>
+      <Card>
+        <Row icon="✏️" label="Edit Profile"    onClick={()=>goTo("/edit-profile")}    right="›"/>
+        <Row icon="🔒" label="Change Password" onClick={()=>goTo("/change-password")} right="›"/>
+        <Row icon="🚪" label="Log Out"         onClick={()=>navigate("/logout")}      danger/>
+        <Row icon="🗑️" label="Delete Account"  onClick={()=>alert("Contact support to delete your account.")} danger/>
+      </Card>
     </Overlay>
   );
 
   if(screen==="faq") return (
     <Overlay onBack={()=>setScreen("main")} title="FAQ">
-      <NightCard>
+      <Card>
         {FAQS.map((f,i)=>(
           <div key={i} style={{borderBottom:i<FAQS.length-1?`1px solid ${BORDER}`:"none"}}>
             <div onClick={()=>setFaqOpen(faqOpen===i?null:i)} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",cursor:"pointer"}}>
-              <span style={{fontFamily:T.fontBody,fontSize:"14px",color:NAVY,fontWeight:"600",flex:1}}>{f.q}</span>
+              <span style={{fontFamily:T.fontBody,fontSize:"14px",color:CHALK,fontWeight:"600",flex:1}}>{f.q}</span>
               <span style={{fontSize:"18px",color:MUTED,marginLeft:"8px"}}>{faqOpen===i?"−":"+"}</span>
             </div>
             {faqOpen===i && <div style={{padding:"0 16px 14px",fontFamily:T.fontBody,fontSize:"13px",color:MUTED,lineHeight:"1.6"}}>{f.a}</div>}
           </div>
         ))}
-      </NightCard>
+      </Card>
     </Overlay>
   );
 
   if(screen==="contact") return (
     <Overlay onBack={()=>setScreen("main")} title="Contact Us">
-      <NightCard>
-        <NightRow icon="📧" label="Email Support"      sub="support@sweatdebt.app"  onClick={()=>window.open("mailto:support@sweatdebt.app")} right="›"/>
-        <NightRow icon="🐛" label="Report a Bug"       sub="Help us improve"        onClick={()=>window.open("mailto:bugs@sweatdebt.app?subject=Bug Report")} right="›"/>
-        <NightRow icon="💡" label="Feature Request"    sub="Got an idea?"           onClick={()=>window.open("mailto:ideas@sweatdebt.app?subject=Feature Idea")} right="›"/>
-        <NightRow icon="🐦" label="DM us on X/Twitter" sub="@SweatDebtApp"          onClick={()=>window.open("https://twitter.com/SweatDebtApp")} right="›"/>
-      </NightCard>
+      <Card>
+        <Row icon="📧" label="Email Support"      sub="support@sweatdebt.app"  onClick={()=>window.open("mailto:support@sweatdebt.app")} right="›"/>
+        <Row icon="🐛" label="Report a Bug"       sub="Help us improve"        onClick={()=>window.open("mailto:bugs@sweatdebt.app?subject=Bug Report")} right="›"/>
+        <Row icon="💡" label="Feature Request"    sub="Got an idea?"           onClick={()=>window.open("mailto:ideas@sweatdebt.app?subject=Feature Idea")} right="›"/>
+        <Row icon="🐦" label="DM us on X/Twitter" sub="@SweatDebtApp"          onClick={()=>window.open("https://twitter.com/SweatDebtApp")} right="›"/>
+      </Card>
       <p style={{fontFamily:T.fontBody,fontSize:"12px",color:MUTED,textAlign:"center",margin:"8px 16px"}}>We usually reply within 24 hours 🙌</p>
     </Overlay>
   );
 
   if(screen==="social") return (
     <Overlay onBack={()=>setScreen("main")} title="Social Links">
-      <NightCard>
+      <Card>
         {SOCIAL_PLATFORMS.map(p=>(
           <div key={p.key} style={{padding:"10px 16px",borderBottom:`1px solid ${BORDER}`}}>
             <div style={{display:"flex",alignItems:"center",gap:"10px",marginBottom:"6px"}}>
               <span style={{fontSize:"18px"}}>{p.emoji}</span>
-              <span style={{fontFamily:T.fontBody,fontSize:"13px",color:NAVY,fontWeight:"600"}}>{p.label}</span>
+              <span style={{fontFamily:T.fontBody,fontSize:"13px",color:CHALK,fontWeight:"600"}}>{p.label}</span>
             </div>
             <input value={socialDraft[p.key]||""} onChange={e=>setSocialDraft(d=>({...d,[p.key]:e.target.value}))} placeholder={p.placeholder}
-              style={{width:"100%",padding:"10px 12px",borderRadius:"10px",border:`1px solid ${BORDER}`,fontFamily:T.fontBody,fontSize:"14px",color:NAVY,background:SAND,outline:"none",boxSizing:"border-box"}}/>
+              style={{width:"100%",padding:"10px 12px",borderRadius:"10px",border:`1px solid ${BORDER}`,fontFamily:T.fontBody,fontSize:"14px",color:CHALK,background:MINT,outline:"none",boxSizing:"border-box"}}/>
           </div>
         ))}
-      </NightCard>
-      <button onClick={saveSocial} disabled={socialSaving} style={{width:"100%",padding:"14px",borderRadius:"14px",background:NAVY,border:"none",fontFamily:T.fontDisplay,fontSize:"18px",letterSpacing:"0.06em",color:GOLD,cursor:"pointer",marginBottom:"12px"}}>
+      </Card>
+      <button onClick={saveSocial} disabled={socialSaving} style={{width:"100%",padding:"14px",borderRadius:"14px",background:CHALK,border:"none",fontFamily:T.fontDisplay,fontSize:"18px",letterSpacing:"0.06em",color:WHITE,cursor:"pointer",marginBottom:"12px"}}>
         {socialSaving?"SAVING…":"SAVE LINKS"}
       </button>
     </Overlay>
@@ -322,11 +321,11 @@ export default function ProfileOverlay({ user }){
         {ALL_BADGES.map(b=>{
           const earned = badges.includes(b.id);
           return (
-            <div key={b.id} style={{background:earned?WHITE:SAND,borderRadius:"14px",padding:"16px 12px",textAlign:"center",border:`1.5px solid ${earned?GOLD+"60":BORDER}`,opacity:earned?1:0.5}}>
+            <div key={b.id} style={{background:earned?WHITE:MINT,borderRadius:"14px",padding:"16px 12px",textAlign:"center",border:`1.5px solid ${earned?GREEN+"60":BORDER}`,opacity:earned?1:0.5}}>
               <div style={{fontSize:"28px",marginBottom:"6px",filter:earned?"none":"grayscale(1)"}}>{b.emoji}</div>
-              <div style={{fontFamily:T.fontBody,fontSize:"13px",color:NAVY,fontWeight:"700"}}>{b.label}</div>
+              <div style={{fontFamily:T.fontBody,fontSize:"13px",color:CHALK,fontWeight:"700"}}>{b.label}</div>
               <div style={{fontFamily:T.fontBody,fontSize:"11px",color:MUTED,marginTop:"3px"}}>{b.desc}</div>
-              {earned && <div style={{marginTop:"6px",fontSize:"10px",color:GOLD,fontWeight:"700",letterSpacing:"0.08em"}}>EARNED ✓</div>}
+              {earned && <div style={{marginTop:"6px",fontSize:"10px",color:GREEN,fontWeight:"700",letterSpacing:"0.08em"}}>EARNED ✓</div>}
             </div>
           );
         })}
@@ -345,12 +344,12 @@ export default function ProfileOverlay({ user }){
       {editCaption && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:8000,display:"flex",alignItems:"flex-end"}}>
           <div style={{background:WHITE,width:"100%",borderRadius:"20px 20px 0 0",padding:"20px"}}>
-            <div style={{fontFamily:T.fontDisplay,fontSize:"20px",color:NAVY,marginBottom:"12px"}}>Edit Caption</div>
+            <div style={{fontFamily:T.fontDisplay,fontSize:"20px",color:CHALK,marginBottom:"12px"}}>Edit Caption</div>
             <textarea value={captionDraft} onChange={e=>setCaptionDraft(e.target.value)} placeholder="Add a caption…" rows={3}
-              style={{width:"100%",padding:"12px",borderRadius:"12px",border:`1.5px solid ${BORDER}`,fontFamily:T.fontBody,fontSize:"14px",color:NAVY,resize:"none",boxSizing:"border-box",outline:"none"}}/>
+              style={{width:"100%",padding:"12px",borderRadius:"12px",border:`1.5px solid ${BORDER}`,fontFamily:T.fontBody,fontSize:"14px",color:CHALK,resize:"none",boxSizing:"border-box",outline:"none"}}/>
             <div style={{display:"flex",gap:"10px",marginTop:"12px"}}>
-              <button onClick={()=>setEditCaption(null)} style={{flex:1,padding:"12px",borderRadius:"12px",background:SAND,border:`1px solid ${BORDER}`,fontFamily:T.fontBody,fontSize:"14px",color:MUTED,cursor:"pointer"}}>Cancel</button>
-              <button onClick={handleSaveCaption} style={{flex:1,padding:"12px",borderRadius:"12px",background:NAVY,border:"none",fontFamily:T.fontBody,fontSize:"14px",color:GOLD,cursor:"pointer",fontWeight:"700"}}>Save</button>
+              <button onClick={()=>setEditCaption(null)} style={{flex:1,padding:"12px",borderRadius:"12px",background:MINT,border:`1px solid ${BORDER}`,fontFamily:T.fontBody,fontSize:"14px",color:MUTED,cursor:"pointer"}}>Cancel</button>
+              <button onClick={handleSaveCaption} style={{flex:1,padding:"12px",borderRadius:"12px",background:CHALK,border:"none",fontFamily:T.fontBody,fontSize:"14px",color:WHITE,cursor:"pointer",fontWeight:"700"}}>Save</button>
             </div>
           </div>
         </div>
@@ -358,10 +357,10 @@ export default function ProfileOverlay({ user }){
       {deleteConfirm && (
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:8000,display:"flex",alignItems:"flex-end"}}>
           <div style={{background:WHITE,width:"100%",borderRadius:"20px 20px 0 0",padding:"24px"}}>
-            <div style={{fontFamily:T.fontDisplay,fontSize:"20px",color:NAVY,marginBottom:"8px"}}>Delete Video?</div>
+            <div style={{fontFamily:T.fontDisplay,fontSize:"20px",color:CHALK,marginBottom:"8px"}}>Delete Video?</div>
             <p style={{fontFamily:T.fontBody,fontSize:"14px",color:MUTED,marginBottom:"20px"}}>This can't be undone.</p>
             <div style={{display:"flex",gap:"10px"}}>
-              <button onClick={()=>setDeleteConfirm(null)} style={{flex:1,padding:"13px",borderRadius:"12px",background:SAND,border:`1px solid ${BORDER}`,fontFamily:T.fontBody,fontSize:"14px",color:MUTED,cursor:"pointer"}}>Cancel</button>
+              <button onClick={()=>setDeleteConfirm(null)} style={{flex:1,padding:"13px",borderRadius:"12px",background:MINT,border:`1px solid ${BORDER}`,fontFamily:T.fontBody,fontSize:"14px",color:MUTED,cursor:"pointer"}}>Cancel</button>
               <button onClick={()=>handleDeleteVideo(deleteConfirm)} style={{flex:1,padding:"13px",borderRadius:"12px",background:DANGER,border:"none",fontFamily:T.fontBody,fontSize:"14px",color:WHITE,cursor:"pointer",fontWeight:"700"}}>Delete</button>
             </div>
           </div>
@@ -397,164 +396,152 @@ export default function ProfileOverlay({ user }){
     </Overlay>
   );
 
-  // ── MAIN SCREEN — Night Gold ───────────────────────────────────────────────────
+  // ── MAIN SCREEN ───────────────────────────────────────────────────────────────
   return (
-    <div style={{background:NAVY, minHeight:"100vh"}}>
-      <div style={{minHeight:"100vh", background:SAND, paddingBottom:"90px", overflowY:"auto"}}>
+    <div style={{minHeight:"100vh", background:MINT, paddingBottom:"90px", overflowY:"auto"}}>
 
-        {/* ── HERO HEADER ── */}
-        <div style={{background:NAVY, paddingTop:"max(env(safe-area-inset-top, 0px), 48px)", paddingBottom:"0", position:"relative", overflow:"hidden"}}>
+      {/* ── HEADER ── */}
+      <div style={{background:CHALK, paddingTop:"max(env(safe-area-inset-top, 0px), 48px)", paddingBottom:"0", position:"relative", overflow:"hidden"}}>
 
-          {/* Geometric ring decoration */}
-          <div style={{position:"absolute",top:"-20px",right:"-20px",width:"130px",height:"130px",opacity:0.07,pointerEvents:"none"}}>
-            <svg viewBox="0 0 130 130" fill="none" width="130" height="130">
-              <circle cx="130" cy="0" r="55"  stroke="white" strokeWidth="1"/>
-              <circle cx="130" cy="0" r="75"  stroke="white" strokeWidth="1"/>
-              <circle cx="130" cy="0" r="95"  stroke="white" strokeWidth="1"/>
-              <circle cx="130" cy="0" r="115" stroke="white" strokeWidth="1"/>
-            </svg>
+        {/* Profile row */}
+        <div style={{display:"flex",alignItems:"center",gap:"14px",padding:"0 16px 16px",position:"relative"}}>
+          {/* Avatar */}
+          <div style={{position:"relative",flexShrink:0}}>
+            <div style={{width:"68px",height:"68px",borderRadius:"18px",background:"rgba(255,255,255,0.12)",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",border:"2px solid rgba(255,255,255,0.2)"}}>
+              {photo
+                ? <img src={photo} alt="avatar" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                : <span style={{fontSize:"28px",fontWeight:"700",color:WHITE,fontFamily:T.fontDisplay}}>{displayName.charAt(0).toUpperCase()}</span>
+              }
+            </div>
+            <div style={{position:"absolute",bottom:"-4px",right:"-4px",background:tier.color,borderRadius:"8px",width:"22px",height:"22px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",border:`2px solid ${CHALK}`}}>
+              {tier.emoji}
+            </div>
           </div>
 
-          {/* Profile row */}
-          <div style={{display:"flex",alignItems:"center",gap:"14px",padding:"0 16px 16px",position:"relative"}}>
-            {/* Rounded-square avatar with gold-orange gradient */}
-            <div style={{position:"relative",flexShrink:0}}>
-              <div style={{width:"70px",height:"70px",borderRadius:"20px",background:`linear-gradient(135deg, ${GOLD}, ${ORANGE})`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden",border:"3px solid rgba(255,255,255,0.12)"}}>
-                {photo
-                  ? <img src={photo} alt="avatar" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
-                  : <span style={{fontSize:"28px",fontWeight:"700",color:NAVY,fontFamily:T.fontDisplay}}>{displayName.charAt(0).toUpperCase()}</span>
-                }
-              </div>
-              <div style={{position:"absolute",bottom:"-4px",right:"-4px",background:tier.color,borderRadius:"8px",width:"22px",height:"22px",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"12px",border:`2px solid ${NAVY}`}}>
-                {tier.emoji}
-              </div>
+          {/* Name + tier pill */}
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontFamily:T.fontDisplay,fontSize:"22px",letterSpacing:"0.02em",color:WHITE,fontStyle:"italic"}}>
+              {firstName}
             </div>
-
-            {/* Name + pills */}
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontFamily:T.fontDisplay,fontSize:"22px",letterSpacing:"0.02em",color:WHITE,fontStyle:"italic"}}>
-                {firstName}
+            {username && <div style={{fontFamily:"monospace",fontSize:"11px",color:"rgba(255,255,255,0.45)",marginTop:"1px"}}>@{username}</div>}
+            <div style={{display:"flex",gap:"5px",flexWrap:"wrap",marginTop:"6px"}}>
+              <div style={{display:"inline-flex",alignItems:"center",gap:"4px",background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:"20px",padding:"2px 9px",fontSize:"10px",color:WHITE,fontWeight:"700",fontFamily:"monospace"}}>
+                {tier.emoji} {tier.label.toUpperCase()}
               </div>
-              {username && <div style={{fontFamily:"monospace",fontSize:"11px",color:"rgba(255,255,255,0.4)",marginTop:"1px"}}>@{username}</div>}
-              <div style={{display:"flex",gap:"5px",flexWrap:"wrap",marginTop:"6px"}}>
-                <div style={{display:"inline-flex",alignItems:"center",gap:"4px",background:"rgba(16,185,129,0.15)",border:"1px solid rgba(16,185,129,0.3)",borderRadius:"20px",padding:"2px 9px",fontSize:"10px",color:GOLD,fontWeight:"700",fontFamily:"monospace"}}>
-                  {tier.emoji} {tier.label.toUpperCase()}
+              {stats.wins > 0 && (
+                <div style={{display:"inline-flex",alignItems:"center",gap:"4px",background:"rgba(16,185,129,0.2)",border:"1px solid rgba(16,185,129,0.35)",borderRadius:"20px",padding:"2px 9px",fontSize:"10px",color:"#6ee7b7",fontWeight:"700",fontFamily:"monospace"}}>
+                  🔥 {stats.wins}W
                 </div>
-                {stats.wins > 0 && (
-                  <div style={{display:"inline-flex",alignItems:"center",gap:"4px",background:"rgba(16,185,129,0.1)",border:"1px solid rgba(16,185,129,0.25)",borderRadius:"20px",padding:"2px 9px",fontSize:"10px",color:ORANGE,fontWeight:"700",fontFamily:"monospace"}}>
-                    🔥 {stats.wins}W
-                  </div>
-                )}
-              </div>
+              )}
             </div>
-
-            {/* Edit button */}
-            <button onClick={()=>goTo("/edit-profile")} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:"10px",padding:"7px 12px",fontFamily:"monospace",fontSize:"11px",color:"rgba(255,255,255,0.6)",cursor:"pointer",flexShrink:0}}>
-              Edit ✏️
-            </button>
           </div>
 
-          {/* 4-stat row */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:"0",borderTop:"1px solid rgba(255,255,255,0.06)"}}>
-            {[
-              {label:"BETS",  value:stats.total, color:WHITE},
-              {label:"WINS",  value:stats.wins,  color:GOLD},
-              {label:"LOSSES",value:stats.losses,color:ORANGE},
-              {label:"WIN %", value:winRate+"%", color:WHITE},
-            ].map((s,i)=>(
-              <div key={s.label} style={{padding:"10px 4px",textAlign:"center",borderRight:i<3?"1px solid rgba(255,255,255,0.06)":"none",background:"rgba(255,255,255,0.02)"}}>
-                <div style={{fontFamily:T.fontDisplay,fontSize:"20px",color:s.color,fontStyle:"italic"}}>{s.value}</div>
-                <div style={{fontFamily:"monospace",fontSize:"8px",color:"rgba(255,255,255,0.35)",letterSpacing:"0.1em",marginTop:"2px"}}>{s.label}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Honour bar strip */}
-          <div style={{padding:"10px 16px",background:"rgba(0,0,0,0.2)",display:"flex",alignItems:"center",gap:"10px"}}>
-            <span style={{fontFamily:"monospace",fontSize:"9px",color:"rgba(255,255,255,0.4)",letterSpacing:"0.1em",flexShrink:0}}>HONOUR</span>
-            <div style={{flex:1,height:"5px",background:"rgba(255,255,255,0.1)",borderRadius:"3px",overflow:"hidden"}}>
-              <div style={{height:"100%",width:`${progress}%`,background:GOLD,borderRadius:"3px",transition:"width 0.8s"}}/>
-            </div>
-            <span style={{fontFamily:"monospace",fontSize:"10px",color:GOLD,fontWeight:"700",flexShrink:0}}>{honour}</span>
-            {nextTier && <span style={{fontFamily:"monospace",fontSize:"9px",color:"rgba(255,255,255,0.35)",flexShrink:0}}>{ptsLeft} to {nextTier.emoji}</span>}
-          </div>
-        </div>
-
-        {/* ── SOCIAL LINKS (if set) ── */}
-        {Object.values(socialLinks).some(Boolean) && (
-          <div style={{margin:"12px 16px 0",display:"flex",gap:"7px",flexWrap:"wrap"}}>
-            {SOCIAL_PLATFORMS.filter(p=>socialLinks[p.key]).map(p=>(
-              <button key={p.key} onClick={()=>window.open(socialLinks[p.key].startsWith("http")?socialLinks[p.key]:"https://"+socialLinks[p.key])}
-                style={{background:WHITE,border:`1px solid ${BORDER}`,borderRadius:"20px",padding:"5px 12px",display:"flex",alignItems:"center",gap:"5px",cursor:"pointer"}}>
-                <span style={{fontSize:"13px"}}>{p.emoji}</span>
-                <span style={{fontFamily:T.fontBody,fontSize:"11px",color:NAVY,fontWeight:"600"}}>{p.label}</span>
-              </button>
-            ))}
-          </div>
-        )}
-
-        {/* ── PRIMARY CTA: New Bet ── */}
-        <div style={{margin:"14px 16px 0"}}>
-          <button onClick={()=>goTo("/create")} style={{width:"100%",padding:"16px",background:NAVY,border:"none",borderRadius:"16px",display:"flex",alignItems:"center",gap:"12px",cursor:"pointer"}}>
-            <div style={{width:"42px",height:"42px",borderRadius:"12px",background:"rgba(16,185,129,0.15)",border:"1px solid rgba(16,185,129,0.3)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}}>⚔️</div>
-            <div style={{flex:1,textAlign:"left"}}>
-              <div style={{fontFamily:T.fontDisplay,fontSize:"17px",color:WHITE,letterSpacing:"0.03em",fontStyle:"italic"}}>New Bet</div>
-              <div style={{fontFamily:T.fontBody,fontSize:"11px",color:"rgba(255,255,255,0.45)",marginTop:"1px"}}>Challenge a friend now</div>
-            </div>
-            <div style={{fontFamily:"monospace",fontSize:"16px",color:GOLD}}>›</div>
+          {/* Edit button */}
+          <button onClick={()=>goTo("/edit-profile")} style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.18)",borderRadius:"10px",padding:"7px 12px",fontFamily:"monospace",fontSize:"11px",color:"rgba(255,255,255,0.7)",cursor:"pointer",flexShrink:0}}>
+            Edit ✏️
           </button>
         </div>
 
-        {/* ── 2×2 QUICK GRID ── */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",margin:"8px 16px 0"}}>
+        {/* 4-stat row */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",borderTop:"1px solid rgba(255,255,255,0.08)"}}>
           {[
-            {emoji:"👤", label:"View Profile", bg:"#f0f4ff", action:()=>goTo(`/profile/${user?.uid}`)},
-            {emoji:"🎥", label:"My Videos",    bg:"#fff0f6", action:()=>setScreen("videos")},
-            {emoji:"🃏", label:"Share Card",   bg:"#fff8e1", action:()=>goTo("/sweat-card")},
-            {emoji:"👥", label:"Group Bets",   bg:"#f0fff4", action:()=>goTo("/group-bets")},
-          ].map(a=>(
-            <button key={a.label} onClick={a.action} style={{background:WHITE,border:`1px solid ${BORDER}`,borderRadius:"14px",padding:"14px 12px",display:"flex",alignItems:"center",gap:"10px",cursor:"pointer"}}>
-              <div style={{width:"34px",height:"34px",borderRadius:"10px",background:a.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",flexShrink:0}}>{a.emoji}</div>
-              <span style={{fontFamily:T.fontBody,fontSize:"13px",color:NAVY,fontWeight:"600"}}>{a.label}</span>
-            </button>
+            {label:"BETS",   value:stats.total,    color:WHITE},
+            {label:"WINS",   value:stats.wins,     color:"#6ee7b7"},
+            {label:"LOSSES", value:stats.losses,   color:"#fca5a5"},
+            {label:"WIN %",  value:winRate+"%",    color:WHITE},
+          ].map((s,i)=>(
+            <div key={s.label} style={{padding:"10px 4px",textAlign:"center",borderRight:i<3?"1px solid rgba(255,255,255,0.08)":"none"}}>
+              <div style={{fontFamily:T.fontDisplay,fontSize:"20px",color:s.color,fontStyle:"italic"}}>{s.value}</div>
+              <div style={{fontFamily:"monospace",fontSize:"8px",color:"rgba(255,255,255,0.4)",letterSpacing:"0.1em",marginTop:"2px"}}>{s.label}</div>
+            </div>
           ))}
         </div>
 
-        {/* ── INVITE FRIENDS ── */}
-        <div style={{margin:"10px 16px 0"}}>
-          <InviteFriends user={user} referralCount={referralCount}/>
+        {/* Honour bar strip */}
+        <div style={{padding:"10px 16px",background:"rgba(0,0,0,0.15)",display:"flex",alignItems:"center",gap:"10px"}}>
+          <span style={{fontFamily:"monospace",fontSize:"9px",color:"rgba(255,255,255,0.45)",letterSpacing:"0.1em",flexShrink:0}}>HONOUR</span>
+          <div style={{flex:1,height:"5px",background:"rgba(255,255,255,0.12)",borderRadius:"3px",overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${progress}%`,background:GREEN,borderRadius:"3px",transition:"width 0.8s"}}/>
+          </div>
+          <span style={{fontFamily:"monospace",fontSize:"10px",color:"#6ee7b7",fontWeight:"700",flexShrink:0}}>{honour}</span>
+          {nextTier && <span style={{fontFamily:"monospace",fontSize:"9px",color:"rgba(255,255,255,0.35)",flexShrink:0}}>{ptsLeft} to {nextTier.emoji}</span>}
         </div>
-
-        {/* ── MY STUFF ── */}
-        <SectionLabel label="My Stuff"/>
-        <NightCard style={{margin:"0 16px 10px"}}>
-          <NightRow icon="🏅" label="Badges"      sub={`${badges.length} earned`} onClick={()=>setScreen("badges")}   right="›"/>
-          <NightRow icon="🏆" label="Seasons"     sub="Monthly rankings"          onClick={()=>goTo("/seasons")}     right="›"/>
-          <NightRow icon="📊" label="Leaderboard" sub="See where you rank"        onClick={()=>goTo("/leaderboard")} right="›"/>
-        </NightCard>
-
-        {/* ── ACCOUNT ── */}
-        <SectionLabel label="Account"/>
-        <NightCard style={{margin:"0 16px 10px"}}>
-          <NightRow icon="🔗" label="Social Links" sub="Instagram, Twitter…"    onClick={()=>setScreen("social")}   right="›"/>
-          <NightRow icon="⚙️" label="Settings"     sub="Notifications & privacy" onClick={()=>setScreen("settings")} right="›"/>
-        </NightCard>
-
-        {/* ── SUPPORT ── */}
-        <SectionLabel label="Support"/>
-        <NightCard style={{margin:"0 16px 10px"}}>
-          <NightRow icon="❓" label="FAQ"        sub="How does SweatDebt work?" onClick={()=>setScreen("faq")}     right="›"/>
-          <NightRow icon="📩" label="Contact Us" sub="Bugs, ideas, feedback"    onClick={()=>setScreen("contact")} right="›"/>
-        </NightCard>
-
-        <NightCard style={{margin:"0 16px 10px"}}>
-          <NightRow icon="🚪" label="Log Out" onClick={()=>navigate("/logout")} danger/>
-        </NightCard>
-
-        <p style={{fontFamily:"monospace",fontSize:"10px",color:MUTED,textAlign:"center",padding:"8px 16px 0",letterSpacing:"0.06em"}}>
-          SWEATDEBT · v1.0 · MADE WITH 💪
-        </p>
       </div>
+
+      {/* ── SOCIAL LINKS (if set) ── */}
+      {Object.values(socialLinks).some(Boolean) && (
+        <div style={{margin:"12px 16px 0",display:"flex",gap:"7px",flexWrap:"wrap"}}>
+          {SOCIAL_PLATFORMS.filter(p=>socialLinks[p.key]).map(p=>(
+            <button key={p.key} onClick={()=>window.open(socialLinks[p.key].startsWith("http")?socialLinks[p.key]:"https://"+socialLinks[p.key])}
+              style={{background:WHITE,border:`1px solid ${BORDER}`,borderRadius:"20px",padding:"5px 12px",display:"flex",alignItems:"center",gap:"5px",cursor:"pointer"}}>
+              <span style={{fontSize:"13px"}}>{p.emoji}</span>
+              <span style={{fontFamily:T.fontBody,fontSize:"11px",color:CHALK,fontWeight:"600"}}>{p.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* ── PRIMARY CTA: New Bet ── */}
+      <div style={{margin:"14px 16px 0"}}>
+        <button onClick={()=>goTo("/create")} style={{width:"100%",padding:"16px",background:CHALK,border:"none",borderRadius:"16px",display:"flex",alignItems:"center",gap:"12px",cursor:"pointer"}}>
+          <div style={{width:"42px",height:"42px",borderRadius:"12px",background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:"20px",flexShrink:0}}>⚔️</div>
+          <div style={{flex:1,textAlign:"left"}}>
+            <div style={{fontFamily:T.fontDisplay,fontSize:"17px",color:WHITE,letterSpacing:"0.03em",fontStyle:"italic"}}>New Bet</div>
+            <div style={{fontFamily:T.fontBody,fontSize:"11px",color:"rgba(255,255,255,0.5)",marginTop:"1px"}}>Challenge a friend now</div>
+          </div>
+          <div style={{fontFamily:"monospace",fontSize:"16px",color:"rgba(255,255,255,0.6)"}}>›</div>
+        </button>
+      </div>
+
+      {/* ── 2×2 QUICK GRID ── */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px",margin:"8px 16px 0"}}>
+        {[
+          {emoji:"👤", label:"View Profile", bg:"#f0f4ff", action:()=>goTo(`/profile/${user?.uid}`)},
+          {emoji:"🎥", label:"My Videos",    bg:"#fff0f6", action:()=>setScreen("videos")},
+          {emoji:"🃏", label:"Share Card",   bg:"#fff8e1", action:()=>goTo("/sweat-card")},
+          {emoji:"👥", label:"Group Bets",   bg:"#f0fff4", action:()=>goTo("/group-bets")},
+        ].map(a=>(
+          <button key={a.label} onClick={a.action} style={{background:WHITE,border:`1px solid ${BORDER}`,borderRadius:"14px",padding:"14px 12px",display:"flex",alignItems:"center",gap:"10px",cursor:"pointer"}}>
+            <div style={{width:"34px",height:"34px",borderRadius:"10px",background:a.bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",flexShrink:0}}>{a.emoji}</div>
+            <span style={{fontFamily:T.fontBody,fontSize:"13px",color:CHALK,fontWeight:"600"}}>{a.label}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* ── INVITE FRIENDS ── */}
+      <div style={{margin:"10px 16px 0"}}>
+        <InviteFriends user={user} referralCount={referralCount}/>
+      </div>
+
+      {/* ── MY STUFF ── */}
+      <SectionLabel label="My Stuff"/>
+      <Card style={{margin:"0 16px 10px"}}>
+        <Row icon="🏅" label="Badges"      sub={`${badges.length} earned`} onClick={()=>setScreen("badges")}   right="›"/>
+        <Row icon="🏆" label="Seasons"     sub="Monthly rankings"          onClick={()=>goTo("/seasons")}     right="›"/>
+        <Row icon="📊" label="Leaderboard" sub="See where you rank"        onClick={()=>goTo("/leaderboard")} right="›"/>
+      </Card>
+
+      {/* ── ACCOUNT ── */}
+      <SectionLabel label="Account"/>
+      <Card style={{margin:"0 16px 10px"}}>
+        <Row icon="🔗" label="Social Links" sub="Instagram, Twitter…"    onClick={()=>setScreen("social")}   right="›"/>
+        <Row icon="⚙️" label="Settings"     sub="Notifications & privacy" onClick={()=>setScreen("settings")} right="›"/>
+      </Card>
+
+      {/* ── SUPPORT ── */}
+      <SectionLabel label="Support"/>
+      <Card style={{margin:"0 16px 10px"}}>
+        <Row icon="❓" label="FAQ"        sub="How does SweatDebt work?" onClick={()=>setScreen("faq")}     right="›"/>
+        <Row icon="📩" label="Contact Us" sub="Bugs, ideas, feedback"    onClick={()=>setScreen("contact")} right="›"/>
+      </Card>
+
+      <Card style={{margin:"0 16px 10px"}}>
+        <Row icon="🚪" label="Log Out" onClick={()=>navigate("/logout")} danger/>
+      </Card>
+
+      <p style={{fontFamily:"monospace",fontSize:"10px",color:MUTED,textAlign:"center",padding:"8px 16px 0",letterSpacing:"0.06em"}}>
+        SWEATDEBT · v1.0 · MADE WITH 💪
+      </p>
     </div>
   );
 }
